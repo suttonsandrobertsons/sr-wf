@@ -418,7 +418,11 @@ function ensureMarqueeOverflow(splide, root, settings) {
 	// Measured from the originals rather than Layout.sliderSize(), which would
 	// already include copies added earlier and so would not be idempotent.
 	const setWidth = measureSlidesWidth(originals);
-	if (setWidth < MARQUEE_MIN_MEASURABLE_PX) return false;
+	// Per slide, not summed: ten slides of 1px each clear a summed threshold
+	// while still being an unlaid-out measurement, and the arithmetic below then
+	// asks for the maximum number of copies. Images settle later and the
+	// image-load refresh brings us back here with real widths.
+	if (setWidth / originals.length < MARQUEE_MIN_MEASURABLE_PX) return false;
 
 	// Aim past the container with a margin, so a small resize does not
 	// immediately drop back under the threshold.
