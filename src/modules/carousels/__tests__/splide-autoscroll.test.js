@@ -11,6 +11,7 @@ describe("Splide autoscroll", () => {
 	let pauseAutoScrollBeforeReady;
 	let marqueeSlideWidth;
 	let marqueeContainerWidth;
+	let originalGetBoundingClientRect;
 
 	beforeEach(() => {
 		originalSplide = globalThis.Splide;
@@ -29,6 +30,17 @@ describe("Splide autoscroll", () => {
 		marqueeContainerWidth = null;
 		mediaQueryListeners = new Set();
 		createdInstances = [];
+
+		// jsdom reports every rect as zero. The module measures real slide widths,
+		// so give slides a width when a test asks for one.
+		originalGetBoundingClientRect = Element.prototype.getBoundingClientRect;
+		Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+			const width =
+				marqueeSlideWidth !== null && this.classList?.contains("splide__slide")
+					? marqueeSlideWidth
+					: 0;
+			return { width, height: 0, top: 0, left: 0, right: width, bottom: 0, x: 0, y: 0 };
+		};
 
 		window.matchMedia = vi.fn(() => ({
 			media: "(max-width: 767px)",
@@ -57,12 +69,6 @@ describe("Splide autoscroll", () => {
 				this.Components = {
 					Layout: {
 						isOverflow: () => currentIsOverflow,
-						// Splide measures only the real slides here; clones are excluded.
-						sliderSize: () =>
-							marqueeSlideWidth === null
-								? 0
-								: Array.from(root.querySelectorAll(".splide__slide")).length *
-									marqueeSlideWidth,
 						listSize: () => marqueeContainerWidth ?? 0,
 					},
 					Elements: {
@@ -127,6 +133,7 @@ describe("Splide autoscroll", () => {
 	});
 
 	afterEach(() => {
+		Element.prototype.getBoundingClientRect = originalGetBoundingClientRect;
 		vi.useRealTimers();
 		window.matchMedia = originalMatchMedia;
 		globalThis.Splide = originalSplide;
@@ -400,8 +407,8 @@ describe("Splide autoscroll", () => {
 	});
 
 	it("caps duplication instead of expanding without bound", () => {
-		// 1px of content against a 100000px container would want ~125000 sets.
-		const root = buildMarquee({ slideWidth: 1, containerWidth: 100000 });
+		// 20px of content against a 100000px container would want ~6250 sets.
+		const root = buildMarquee({ slideWidth: 10, containerWidth: 100000 });
 
 		createCarousel(root);
 

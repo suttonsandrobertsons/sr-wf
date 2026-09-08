@@ -377,36 +377,54 @@ function updateSplideDragForOverflow(splide, settings, isOverflow) {
 //
 // So give it enough *real* slides to genuinely overflow. Splide's invariants
 // then hold at any width, exactly as they already do on a laptop.
-function measureMarqueeContent(splide) {
-	const layout = splide.Components?.Layout;
-	if (!layout || typeof layout.sliderSize !== "function") return null;
-	if (typeof layout.listSize !== "function") return null;
+// Splide's own loop clones, which must never be treated as source material.
+const SPLIDE_CLONE_CLASS = "splide__slide--clone";
+// Slides have no width until their images have laid out. Expanding on a
+// near-zero measurement asks for a practically unbounded number of copies.
+const MARQUEE_MIN_MEASURABLE_PX = 8;
 
-	const content = layout.sliderSize(true);
-	const container = layout.listSize();
-	if (!content || !container) return null;
+function partitionMarqueeSlides(root, settings) {
+	const originals = [];
+	const duplicates = [];
 
-	return { content, container };
+	qsa(root, settings.slideSelector).forEach((slide) => {
+		// A clone of a duplicate carries the duplicate attribute too, so the
+		// clone check has to come first.
+		if (slide.classList.contains(SPLIDE_CLONE_CLASS)) return;
+		if (slide.hasAttribute(settings.marqueeDuplicateAttr)) duplicates.push(slide);
+		else originals.push(slide);
+	});
+
+	return { originals, duplicates };
+}
+
+function measureSlidesWidth(slides) {
+	return slides.reduce((total, slide) => total + slide.getBoundingClientRect().width, 0);
 }
 
 function ensureMarqueeOverflow(splide, root, settings) {
 	if (settings.options.autoScroll !== true) return false;
 	if (settings.options.loop !== true) return false;
 
-	const measured = measureMarqueeContent(splide);
-	if (!measured) return false;
-	if (measured.content > measured.container) return false;
+	const layout = splide.Components?.Layout;
+	if (!layout || typeof layout.listSize !== "function") return false;
 
-	const originals = qsa(root, settings.slideSelector).filter(
-		(slide) =>
-			!slide.hasAttribute(settings.marqueeDuplicateAttr) && !slide.classList.contains("is-clone"),
-	);
+	const container = layout.listSize();
+	if (!container) return false;
+
+	const { originals, duplicates } = partitionMarqueeSlides(root, settings);
 	if (originals.length === 0) return false;
 
-	// One duplicate set adds `content`. Aim past the container with a margin so
-	// a small resize does not immediately drop back under the threshold.
-	const setsWanted = Math.ceil((measured.container * 1.25) / measured.content);
-	const setsToAdd = Math.min(setsWanted, settings.marqueeMaxDuplicateSets) - 1;
+	// Measured from the originals rather than Layout.sliderSize(), which would
+	// already include copies added earlier and so would not be idempotent.
+	const setWidth = measureSlidesWidth(originals);
+	if (setWidth < MARQUEE_MIN_MEASURABLE_PX) return false;
+
+	// Aim past the container with a margin, so a small resize does not
+	// immediately drop back under the threshold.
+	const setsPresent = 1 + Math.round(duplicates.length / originals.length);
+	const setsWanted = Math.ceil((container * 1.25) / setWidth);
+	const setsToAdd = Math.min(setsWanted, settings.marqueeMaxDuplicateSets) - setsPresent;
 	if (setsToAdd < 1) return false;
 
 	const additions = [];
@@ -427,9 +445,11 @@ function ensureMarqueeOverflow(splide, root, settings) {
 	}
 
 	logCarousel(root, "Duplicating marquee slides to restore overflow", {
-		contentWidth: Math.round(measured.content),
-		containerWidth: Math.round(measured.container),
+		setWidth: Math.round(setWidth),
+		containerWidth: Math.round(container),
 		originalSlides: originals.length,
+		setsPresent,
+		setsWanted,
 		setsAdded: setsToAdd,
 		slidesAdded: additions.length,
 	});
