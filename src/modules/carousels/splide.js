@@ -355,13 +355,30 @@ function updateSplideDragForOverflow(splide, settings, isOverflow) {
 	};
 }
 
+// An autoscrolling carousel is a marquee: its job is to keep moving, so it is
+// not gated on overflow the way a draggable carousel is.
+//
+// Splide's isOverflow() compares the *real* slides against the container and
+// ignores loop clones (Splide.length is Slides.getLength(true)). A short brand
+// list on a wide viewport therefore reports "not overflowing" while the track
+// still renders roughly three times the container width in clones. Gating on it
+// stopped the brand bar on any viewport past ~2350px — i.e. fullscreen on a
+// 2560-wide monitor. Adding clones cannot fix this; they are not counted.
+//
+// Splide's own AutoScroll extension has no overflow condition at all.
+function shouldAutoScrollRun(splide, settings, isOverflow) {
+	if (settings.options.autoScroll === true) return true;
+
+	return getSplideActiveState(splide, isOverflow);
+}
+
 function syncSplideAutoScrollForOverflow(splide, settings, isOverflow) {
 	if (settings.options.autoScroll !== true) return;
 
 	const autoScroll = splide.Components?.AutoScroll;
 	if (!autoScroll) return;
 
-	const shouldRun = getSplideActiveState(splide, isOverflow);
+	const shouldRun = shouldAutoScrollRun(splide, settings, isOverflow);
 
 	if (shouldRun) {
 		// The extension can pause itself during Splide's initial positioning,
@@ -376,7 +393,7 @@ function syncSplideAutoScrollForOverflow(splide, settings, isOverflow) {
 
 function startSplideAutoScrollWhenReady(splide, settings) {
 	if (settings.options.autoScroll !== true) return;
-	if (!getSplideActiveState(splide)) return;
+	if (!shouldAutoScrollRun(splide, settings)) return;
 
 	const autoScroll = splide.Components?.AutoScroll;
 	if (!autoScroll) return;

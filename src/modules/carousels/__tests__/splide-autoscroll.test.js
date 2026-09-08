@@ -207,19 +207,30 @@ describe("Splide autoscroll", () => {
 		expect(createdInstances[0].options.pauseOnHover).toBe(true);
 	});
 
-	it("pauses until the carousel is actually overflowing", () => {
+	// Replaces an earlier test that paused autoscroll until the carousel
+	// overflowed. Splide's isOverflow() ignores loop clones, so a short brand
+	// list on a wide viewport reported "not overflowing" and the marquee stopped
+	// dead past ~2350px — fullscreen on a 2560-wide monitor. A marquee keeps
+	// moving regardless; only draggable carousels are gated on overflow.
+	it("keeps a marquee scrolling even when Splide reports no overflow", () => {
 		const root = buildCarousel({ autoScroll: "false", autoScrollMobile: "true" });
 		mobileMatches = true;
+		currentIsOverflow = false;
 
 		createCarousel(root);
 
-		expect(createdInstances[0].Components.AutoScroll.pause).toHaveBeenCalledTimes(1);
-		expect(createdInstances[0].Components.AutoScroll.play).not.toHaveBeenCalled();
+		expect(createdInstances[0].Components.AutoScroll.pause).not.toHaveBeenCalled();
+		expect(createdInstances[0].Components.AutoScroll.play).toHaveBeenCalled();
 
-		currentIsOverflow = true;
-		createdInstances[0].trigger("overflow", true);
+		const playsBefore = createdInstances[0].Components.AutoScroll.play.mock.calls.length;
 
-		expect(createdInstances[0].Components.AutoScroll.play).toHaveBeenCalledTimes(1);
+		// A resize that flips overflow off must not stop it either.
+		createdInstances[0].trigger("overflow", false);
+
+		expect(createdInstances[0].Components.AutoScroll.pause).not.toHaveBeenCalled();
+		expect(
+			createdInstances[0].Components.AutoScroll.play.mock.calls.length,
+		).toBeGreaterThanOrEqual(playsBefore);
 	});
 
 	it("refreshes once after all images settle", () => {
@@ -278,7 +289,9 @@ describe("Splide autoscroll", () => {
 		vi.runAllTimers();
 
 		expect(refresh).not.toHaveBeenCalled();
-		expect(instance.splide.Components.AutoScroll.pause).toHaveBeenCalledTimes(1);
+		// A marquee is never paused for lack of overflow, so it runs from mount.
+		expect(instance.splide.Components.AutoScroll.pause).not.toHaveBeenCalled();
+		expect(instance.splide.Components.AutoScroll.play).toHaveBeenCalled();
 	});
 
 	it("restarts an overflowing carousel if initialization pauses it before ready", () => {
