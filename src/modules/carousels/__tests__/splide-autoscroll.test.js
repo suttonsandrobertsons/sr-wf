@@ -429,4 +429,32 @@ describe("Splide autoscroll", () => {
 		// re-measured each time, so repeats must not stack up.
 		expect(realSlides(root).length).toBe(afterMount);
 	});
+	it("refuses to expand on an unlaid-out measurement", () => {
+		// Slides exist but have not been laid out yet: 2 x 1px clears a summed
+		// threshold while being meaningless, and previously asked for the cap.
+		const root = buildMarquee({ slideWidth: 1, containerWidth: 2560 });
+
+		createCarousel(root);
+
+		expect(realSlides(root)).toHaveLength(2);
+		expect(createdInstances[0].addCalls).toBeUndefined();
+	});
+
+	it("expands once real widths arrive after an unlaid-out first pass", () => {
+		const root = buildMarquee({ slideWidth: 1, containerWidth: 2560 });
+
+		createCarousel(root);
+		expect(realSlides(root)).toHaveLength(2);
+
+		// Images settle; the refresh path re-enters with real widths.
+		marqueeSlideWidth = 125;
+		createdInstances[0].trigger("resize");
+
+		const duplicates = realSlides(root).filter((s) =>
+			s.hasAttribute("data-marquee-duplicate"),
+		);
+		expect(duplicates.length).toBeGreaterThan(0);
+		// ceil(2560 * 1.25 / 250) = 13 -> capped at 8 sets -> 7 added -> 14 slides.
+		expect(duplicates).toHaveLength(14);
+	});
 });
