@@ -9,6 +9,8 @@ describe("Splide autoscroll", () => {
 	let createdInstances;
 	let currentIsOverflow;
 	let pauseAutoScrollBeforeReady;
+	let marqueeSlideWidth;
+	let marqueeContainerWidth;
 
 	beforeEach(() => {
 		originalSplide = globalThis.Splide;
@@ -21,6 +23,10 @@ describe("Splide autoscroll", () => {
 		mobileMatches = false;
 		currentIsOverflow = false;
 		pauseAutoScrollBeforeReady = false;
+		// null disables the marquee measurements entirely, so tests that do not
+		// care about expansion behave exactly as they did before.
+		marqueeSlideWidth = null;
+		marqueeContainerWidth = null;
 		mediaQueryListeners = new Set();
 		createdInstances = [];
 
@@ -51,6 +57,13 @@ describe("Splide autoscroll", () => {
 				this.Components = {
 					Layout: {
 						isOverflow: () => currentIsOverflow,
+						// Splide measures only the real slides here; clones are excluded.
+						sliderSize: () =>
+							marqueeSlideWidth === null
+								? 0
+								: Array.from(root.querySelectorAll(".splide__slide")).length *
+									marqueeSlideWidth,
+						listSize: () => marqueeContainerWidth ?? 0,
 					},
 					Elements: {
 						list: root.querySelector(".splide__list"),
@@ -91,6 +104,14 @@ describe("Splide autoscroll", () => {
 				this._events.get("ready")?.forEach((callback) => callback());
 			}
 
+			add(slides) {
+				const list = this.root.querySelector(".splide__list");
+				[].concat(slides).forEach((slide) => list.appendChild(slide));
+				this.addCalls = (this.addCalls || 0) + 1;
+				// Splide refreshes after add, which re-emits layout events.
+				this.refresh();
+			}
+
 			refresh() {
 				this.trigger("overflow", currentIsOverflow);
 			}
@@ -118,9 +139,12 @@ describe("Splide autoscroll", () => {
 		autoScrollMobile = null,
 		autoScrollPauseOnHover = null,
 		withImages = false,
+		loop = null,
 	} = {}) {
 		document.body.innerHTML = `
 			<div class="splide" data-splide-autoscroll="${autoScroll}" ${
+				loop === null ? "" : `data-splide-loop="${loop}"`
+			} ${
 				autoScrollMobile === null ? "" : `data-splide-autoscroll-mobile="${autoScrollMobile}"`
 			} ${
 				autoScrollPauseOnHover === null
@@ -290,5 +314,112 @@ describe("Splide autoscroll", () => {
 
 		expect(instance.splide.Components.AutoScroll.play).toHaveBeenCalledTimes(2);
 		expect(instance.splide.Components.AutoScroll.isPaused()).toBe(false);
+	});
+	// --- marquee overflow expansion -------------------------------------------
+	// Splide's isOverflow() counts only real slides, so a short brand list on a
+	// wide viewport stops overflowing. Autoscroll is then paused AND, because
+	// Controller.getEnd() collapses under omitEnd, loop wrapping degenerates.
+	// The module duplicates real slides so the marquee genuinely overflows.
+
+	function buildMarquee({ slideWidth, containerWidth, isOverflow = false }) {
+		marqueeSlideWidth = slideWidth;
+		marqueeContainerWidth = containerWidth;
+		currentIsOverflow = isOverflow;
+		// A real marquee always loops; expansion only applies to looping carousels.
+		return buildCarousel({ autoScroll: "true", loop: "true" });
+	}
+
+	function realSlides(root) {
+		return Array.from(root.querySelectorAll(".splide__slide"));
+	}
+
+	it("duplicates slides when the marquee no longer overflows", () => {
+		// 2 slides x 100px = 200px of content in a 1000px container.
+		const root = buildMarquee({ slideWidth: 100, containerWidth: 1000 });
+
+		createCarousel(root);
+
+		const slides = realSlides(root);
+		expect(slides.length).toBeGreaterThan(2);
+		// ceil(1000 * 1.25 / 200) = 7 sets total -> 6 sets added -> 12 extra slides.
+		expect(slides.filter((s) => s.hasAttribute("data-marquee-duplicate"))).toHaveLength(12);
+	});
+
+	it("leaves an already overflowing marquee alone", () => {
+		const root = buildMarquee({ slideWidth: 900, containerWidth: 1000, isOverflow: true });
+
+		createCarousel(root);
+
+		expect(realSlides(root)).toHaveLength(2);
+		expect(createdInstances[0].addCalls).toBeUndefined();
+	});
+
+	it("hides duplicates from assistive tech and the tab order", () => {
+		document.body.innerHTML = `
+			<div class="splide" data-splide-autoscroll="true" data-splide-loop="true">
+				<div class="splide__track">
+					<ul class="splide__list">
+						<li class="splide__slide"><a href="/a" aria-current="page">A</a></li>
+						<li class="splide__slide"><a href="/b">B</a></li>
+					</ul>
+				</div>
+			</div>
+		`;
+		marqueeSlideWidth = 100;
+		marqueeContainerWidth = 1000;
+		const root = document.querySelector(".splide");
+
+		createCarousel(root);
+
+		const duplicates = realSlides(root).filter((s) =>
+			s.hasAttribute("data-marquee-duplicate"),
+		);
+		expect(duplicates.length).toBeGreaterThan(0);
+		duplicates.forEach((slide) => {
+			expect(slide.getAttribute("aria-hidden")).toBe("true");
+			slide.querySelectorAll("a").forEach((link) => {
+				expect(link.getAttribute("tabindex")).toBe("-1");
+				expect(link.hasAttribute("aria-current")).toBe(false);
+			});
+		});
+
+		// The originals keep their semantics.
+		const original = realSlides(root)[0];
+		expect(original.hasAttribute("aria-hidden")).toBe(false);
+		expect(original.querySelector("a").hasAttribute("tabindex")).toBe(false);
+	});
+
+	it("does not duplicate slides for a carousel that is not a marquee", () => {
+		marqueeSlideWidth = 100;
+		marqueeContainerWidth = 1000;
+		const root = buildCarousel({ autoScroll: "false", loop: "true" });
+
+		createCarousel(root);
+
+		expect(realSlides(root)).toHaveLength(2);
+	});
+
+	it("caps duplication instead of expanding without bound", () => {
+		// 1px of content against a 100000px container would want ~125000 sets.
+		const root = buildMarquee({ slideWidth: 1, containerWidth: 100000 });
+
+		createCarousel(root);
+
+		// marqueeMaxDuplicateSets is 8 -> at most 7 added sets of 2 slides.
+		expect(realSlides(root).length).toBeLessThanOrEqual(2 + 7 * 2);
+	});
+
+	it("does not compound duplicates when overflow reports false repeatedly", () => {
+		const root = buildMarquee({ slideWidth: 100, containerWidth: 1000 });
+
+		createCarousel(root);
+		const afterMount = realSlides(root).length;
+
+		createdInstances[0].trigger("overflow", false);
+		createdInstances[0].trigger("overflow", false);
+
+		// Duplicates are measured from the originals, and the widened track is
+		// re-measured each time, so repeats must not stack up.
+		expect(realSlides(root).length).toBe(afterMount);
 	});
 });

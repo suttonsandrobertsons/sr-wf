@@ -19,6 +19,10 @@ const defaults = {
 	draggingClass: "is-dragging",
 	centerSlideClass: "is-center-slide",
 
+	// Marks slides this module duplicated to keep a marquee overflowing.
+	marqueeDuplicateAttr: "data-marquee-duplicate",
+	marqueeMaxDuplicateSets: 8,
+
 	loopAttr: "data-splide-loop",
 	loopMobileAttr: "data-splide-loop-mobile",
 	draggableAttr: "data-splide-draggable",
@@ -353,6 +357,85 @@ function updateSplideDragForOverflow(splide, settings, isOverflow) {
 	splide.options = {
 		drag: settings.options.draggable === true && isOverflow,
 	};
+}
+
+// A marquee needs more content than container, or it does not work at all.
+//
+// Splide's isOverflow() is `sliderSize(true) > listSize()`, and sliderSize
+// measures only the *real* slides - Splide.length is Slides.getLength(true), so
+// loop clones are excluded. With ten brands the real track is ~2335px, so past
+// that width Splide reports "not overflowing" and two things follow:
+//
+//   1. autoscroll is paused by the gate below, and
+//   2. Controller.getEnd() collapses to 0 under `omitEnd`, because every index
+//      then resolves to the same position. Move.loop() wraps on
+//      `index > getEnd()`, so the wrap arithmetic degenerates.
+//
+// (2) is why simply forcing autoscroll to run is not a fix: the track
+// translates and never wraps, running away to -2^24 and taking the logos
+// off-screen. Adding clones cannot help either - they are not counted.
+//
+// So give it enough *real* slides to genuinely overflow. Splide's invariants
+// then hold at any width, exactly as they already do on a laptop.
+function measureMarqueeContent(splide) {
+	const layout = splide.Components?.Layout;
+	if (!layout || typeof layout.sliderSize !== "function") return null;
+	if (typeof layout.listSize !== "function") return null;
+
+	const content = layout.sliderSize(true);
+	const container = layout.listSize();
+	if (!content || !container) return null;
+
+	return { content, container };
+}
+
+function ensureMarqueeOverflow(splide, root, settings) {
+	if (settings.options.autoScroll !== true) return false;
+	if (settings.options.loop !== true) return false;
+
+	const measured = measureMarqueeContent(splide);
+	if (!measured) return false;
+	if (measured.content > measured.container) return false;
+
+	const originals = qsa(root, settings.slideSelector).filter(
+		(slide) =>
+			!slide.hasAttribute(settings.marqueeDuplicateAttr) && !slide.classList.contains("is-clone"),
+	);
+	if (originals.length === 0) return false;
+
+	// One duplicate set adds `content`. Aim past the container with a margin so
+	// a small resize does not immediately drop back under the threshold.
+	const setsWanted = Math.ceil((measured.container * 1.25) / measured.content);
+	const setsToAdd = Math.min(setsWanted, settings.marqueeMaxDuplicateSets) - 1;
+	if (setsToAdd < 1) return false;
+
+	const additions = [];
+	for (let set = 0; set < setsToAdd; set += 1) {
+		originals.forEach((slide) => {
+			const copy = slide.cloneNode(true);
+			copy.setAttribute(settings.marqueeDuplicateAttr, "");
+			// Visible and clickable like Splide's own clones, but not announced
+			// twice and not a second tab stop.
+			copy.setAttribute("aria-hidden", "true");
+			copy.removeAttribute("id");
+			qsa(copy, "a, button, input, select, textarea, [tabindex]").forEach((el) => {
+				el.setAttribute("tabindex", "-1");
+				el.removeAttribute("aria-current");
+			});
+			additions.push(copy);
+		});
+	}
+
+	logCarousel(root, "Duplicating marquee slides to restore overflow", {
+		contentWidth: Math.round(measured.content),
+		containerWidth: Math.round(measured.container),
+		originalSlides: originals.length,
+		setsAdded: setsToAdd,
+		slidesAdded: additions.length,
+	});
+
+	splide.add(additions);
+	return true;
 }
 
 function syncSplideAutoScrollForOverflow(splide, settings, isOverflow) {
@@ -775,8 +858,24 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		syncPaginationButtonState(splide.index);
 	});
 
+	// splide.add() refreshes, which re-emits mounted/overflow. Without this the
+	// expansion would re-enter itself while the layout is mid-rebuild.
+	let isExpandingMarquee = false;
+
+	function expandMarqueeIfNeeded() {
+		if (isDestroyed || isExpandingMarquee) return;
+
+		isExpandingMarquee = true;
+		try {
+			ensureMarqueeOverflow(splide, root, effectiveSettings);
+		} finally {
+			isExpandingMarquee = false;
+		}
+	}
+
 	// Setup Splide event listeners
 	splide.on("mounted", () => {
+		expandMarqueeIfNeeded();
 		hasActiveLayout ||= getSplideActiveState(splide);
 		updateSplideState(splide, root, effectiveSettings);
 		syncSplideAutoScrollForOverflow(splide, effectiveSettings);
@@ -801,6 +900,8 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 	});
 
 	splide.on("resize", () => {
+		// A wider viewport can outgrow the copies added at mount.
+		expandMarqueeIfNeeded();
 		hasActiveLayout ||= getSplideActiveState(splide);
 		updateSplideState(splide, root, effectiveSettings);
 		requestCenterSlideUpdate();
@@ -808,6 +909,10 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 	});
 
 	splide.on("overflow", (isOverflow) => {
+		// Overflow going false is the marquee's failure mode, not a state to
+		// settle into: expand first, so the rest of this runs on the real state.
+		if (isOverflow === false) expandMarqueeIfNeeded();
+
 		hasActiveLayout ||= isOverflow;
 		updateSplideDragForOverflow(splide, effectiveSettings, isOverflow);
 		updateSplideState(splide, root, effectiveSettings, isOverflow);
