@@ -5,6 +5,17 @@ import { pickRadio, fieldState, LEAD_FORMS } from "./helpers/forms.js";
 
 const ENQUIRY_FORMS = LEAD_FORMS;
 
+// enquiry_consider_consignment was deleted from the gold calculator only
+// (869eu8kr1, 9 Sep 2026) — three Designer instances: /gold-loans/calculator,
+// /sell-gold/calculator and /dev/forms/gold-calculator. Every other lead form
+// still asks it, and the shared form_radio-group component is untouched, so
+// the retention below is as much the point of these tests as the removal.
+const asksConsignment = (key) => key !== "gold";
+const followUpsFor = (key) =>
+  asksConsignment(key)
+    ? ["enquiry_consider_loan", "enquiry_consider_consignment"]
+    : ["enquiry_consider_loan"];
+
 test.describe("enquiry question — shape on every lead form", () => {
   for (const { key, path } of ENQUIRY_FORMS) {
     test(`${key} on ${path} offers exactly Loan and Sell My Items`, async ({ page }) => {
@@ -26,12 +37,23 @@ test.describe("enquiry question — shape on every lead form", () => {
       expect(leadType.present, "New_Lead_Type is derived at submit, never authored").toBe(false);
     });
 
+    test(`${key} on ${path} ${asksConsignment(key) ? "asks" : "does not ask"} about consignment`, async ({ page }) => {
+      await page.goto(path);
+      const consignment = await fieldState(page, key, "enquiry_consider_consignment");
+
+      // Deleted, not hidden: the field carries data-form-field-required, and a
+      // required control that is present but invisible can stop step 1 from
+      // validating at all. Absent also makes deriveNewLeadType drop
+      // "Consignment Customer" on its own, with no JS change.
+      expect(consignment.present).toBe(asksConsignment(key));
+    });
+
     test(`${key} on ${path} gates the follow-ups on a sell enquiry`, async ({ page }) => {
       await page.goto(path);
 
       expect(await pickRadio(page, key, "enquiry_type", "Loan")).toBe(true);
       await page.waitForTimeout(700);
-      for (const name of ["enquiry_consider_loan", "enquiry_consider_consignment"]) {
+      for (const name of followUpsFor(key)) {
         const hidden = await fieldState(page, key, name);
         expect(hidden.present, `${name} should exist`).toBe(true);
         expect(hidden.visible, `${name} must be hidden for a loan enquiry`).toBe(false);
@@ -40,7 +62,7 @@ test.describe("enquiry question — shape on every lead form", () => {
 
       expect(await pickRadio(page, key, "enquiry_type", "Sell My Items")).toBe(true);
       await page.waitForTimeout(700);
-      for (const name of ["enquiry_consider_loan", "enquiry_consider_consignment"]) {
+      for (const name of followUpsFor(key)) {
         const shown = await fieldState(page, key, name);
         expect(shown.visible, `${name} must show for a sell enquiry`).toBe(true);
         expect(shown.conditionHidden).toBe(false);

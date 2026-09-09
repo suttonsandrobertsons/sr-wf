@@ -32,27 +32,27 @@ describe("initStructuredData", () => {
 
 	it("builds FAQPage JSON-LD from the FAQ collection list", () => {
 		renderPage(`
-			<section data-faq-split="component" class="faq">
+			<section data-faq-split="component" data-structured-data="faq" class="faq">
 				<div data-faq-split="source" class="faq_list-cols">
-					<div data-faq-split="item" class="faq-item">
+					<div data-schema="faq-item" data-faq-split="item" class="faq-item">
 						<div data-accordion="trigger" class="faq-item_header">
-							<h3 class="faq-item_title">How do I get my valuables back once I repay the loan?</h3>
+							<h3 data-schema="faq-question" class="faq-item_title">How do I get my valuables back once I repay the loan?</h3>
 						</div>
 						<div data-accordion="content" class="faq_content-wrap">
 							<div class="faq_content">
-								<div class="text-rich-text w-richtext">
+								<div data-schema="faq-answer" class="text-rich-text w-richtext">
 									<p>Once your loan has been repaid in full, you can collect your items from our London showroom or use our free insured courier return.</p>
 								</div>
 							</div>
 						</div>
 					</div>
-					<div data-faq-split="item" class="faq-item">
+					<div data-schema="faq-item" data-faq-split="item" class="faq-item">
 						<div data-accordion="trigger" class="faq-item_header">
-							<h3 class="faq-item_title">Is your courier service to and from Leicester insured?</h3>
+							<h3 data-schema="faq-question" class="faq-item_title">Is your courier service to and from Leicester insured?</h3>
 						</div>
 						<div data-accordion="content" class="faq_content-wrap">
 							<div class="faq_content">
-								<div class="text-rich-text w-richtext">
+								<div data-schema="faq-answer" class="text-rich-text w-richtext">
 									<p>Yes, all items sent to us are fully insured up to £20,000 while in transit and stored with us.</p>
 								</div>
 							</div>
@@ -81,15 +81,15 @@ describe("initStructuredData", () => {
 
 	it("replaces generated scripts when run again", () => {
 		renderPage(`
-			<section data-faq-split="component" class="faq">
+			<section data-faq-split="component" data-structured-data="faq" class="faq">
 				<div data-faq-split="source" class="faq_list-cols">
-					<div data-faq-split="item" class="faq-item">
+					<div data-schema="faq-item" data-faq-split="item" class="faq-item">
 						<div data-accordion="trigger" class="faq-item_header">
-							<h3 class="faq-item_title">Question one?</h3>
+							<h3 data-schema="faq-question" class="faq-item_title">Question one?</h3>
 						</div>
 						<div data-accordion="content" class="faq_content-wrap">
 							<div class="faq_content">
-								<div class="text-rich-text w-richtext">
+								<div data-schema="faq-answer" class="text-rich-text w-richtext">
 									<p>Answer one.</p>
 								</div>
 							</div>

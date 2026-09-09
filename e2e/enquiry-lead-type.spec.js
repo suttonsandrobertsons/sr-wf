@@ -140,8 +140,12 @@ test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
       await new Promise((r) => setTimeout(r, 1600));
     });
 
+    // No enquiry_consider_consignment here: it was deleted from the gold
+    // calculator on 9 Sep 2026 (869eu8kr1). deriveNewLeadType reads it through
+    // formValues.get, so an absent field reads as not-yes and "Consignment
+    // Customer" drops out with no JS change — which is what this asserts.
     await fillAndSubmit(page, "gold", {
-      enquiry_type: "Sell My Items", enquiry_consider_loan: "Yes", enquiry_consider_consignment: "No",
+      enquiry_type: "Sell My Items", enquiry_consider_loan: "Yes",
     });
     expect(capture.one(capture.fields(), "New_Lead_Type")).toBe("SHP Customer, Loan Customer");
   });
