@@ -817,7 +817,7 @@ function getItemPrompt(itemElement) {
   }
   if (itemType === "coin" || itemType === "bar") {
     if (!bullionName) return `Choose ${itemType} type to continue`;
-    if (bullionName === "other" || bullionName === "unsure") return "Manual quote required — enter details and we'll get back to you";
+    if (bullionName === "other" || bullionName === "unsure") return MANUAL_QUOTE_PROMPT;
     return "";
   }
   return "Choose gold type to continue";
@@ -881,6 +881,12 @@ const RATE_KEYS = new Set(["interest_rate", "apr"]);
 // Per-item formatting fallback, mirrors the summary keys below.
 const ITEM_MONEY_KEYS = new Set(["spot_total", "purchase_total", "loan_total", "subtotal"]);
 const ITEM_NUMBER_KEYS = new Set(["quantity", "weight"]);
+// Shown in place of an item's figure when the calculator cannot price the row.
+// Exported because quote-sheet.js prints the same sentence: the printed sheet
+// must not word this differently from the screen it was printed from.
+export const MANUAL_QUOTE_PROMPT =
+  "Manual quote required — enter details and we'll get back to you";
+
 
 function renderFormOutputs(form, summary) {
   const enquiryKeys = new Set(["monthly_interest", "interest_rate", "apr", "total_interest", "repayment_amount"]);

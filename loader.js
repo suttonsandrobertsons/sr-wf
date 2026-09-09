@@ -10,6 +10,7 @@ import {
 import { initOverflowDrag } from "./src/modules/overflow-drag.js";
 import { initForms, destroySelects } from "./src/modules/forms/index.js";
 import { initQaUpload } from "./src/modules/forms/qa-upload.js";
+import { initQuoteSheet } from "./src/modules/forms/quote-sheet.js";
 // import "./src/modules/forms/dev.js"; // dev-only form logging/table — keep off outside local dev
 import { initProcess } from "./src/modules/process.js";
 import { initSectionNav } from "./src/modules/section-nav.js";
@@ -73,6 +74,7 @@ sr.functions.initContactWidget = initContactWidget;
 sr.functions.getContactWidgetInstances = getContactWidgetInstances;
 sr.functions.initA11yAnchors = initA11yAnchors;
 sr.functions.initQaUpload = initQaUpload;
+sr.functions.initQuoteSheet = initQuoteSheet;
 
 // Priority: critical
 initNav();
@@ -90,6 +92,7 @@ initTables();
 initFaq();
 initStructuredData();
 initGoldTrend();
+initQuoteSheet();
 initAllResourcesFilters();
 initHistoryTimeline();
 initContactWidget();
