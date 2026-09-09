@@ -162,7 +162,17 @@ export const formConfig = {
     // New_Lead_Type is derived (derived-fields.js) and has no such inputs left
     // in the Designer. Its entry guards any unswept page still carrying the old
     // markup — do not remove it as dead.
-    singleValueFieldNames: ['New_Lead_Type', 'box_and_papers', 'appointment_length', 'meeting_venue', 'bullion_name'],
+    // Names authored as SEVERAL controls in the Designer that must collapse to
+    // one submitted value. The losers are RENAMED to disabledNamePrefix, which
+    // is the only thing that removes a key from Webflow's payload — disabling a
+    // control does not (see core/app.js).
+    //
+    // `New_Lead_Type` was removed on 9 Sep 2026: it is computed in
+    // derived-fields.js and is authored in no page's markup (checked against all
+    // 310 sitemap paths), so it had nothing to dedup. It cannot go back to
+    // markup either — the dedup submits exactly one control and that value
+    // accumulates.
+    singleValueFieldNames: ['box_and_papers', 'appointment_length', 'meeting_venue', 'bullion_name'],
     disabledNamePrefix: '_disabled_',
   },
 
@@ -172,10 +182,23 @@ export const formConfig = {
     currency: 'GBP',
     ouncesPerTroy: 31.1034768,
     purchaseToValuePercent: 88,
+    // Per-item-type purchase rate override, whole percent, applied instead of
+    // purchaseToValuePercent above (see gold.js getOfferRatio). Jewellery only
+    // (869eu8kr1, Sam 25 Aug: "for jewellery only the 88% to 86%, coins and
+    // bars to remain at 88%"). PURCHASES ONLY — loans use loanToValuePercent
+    // for every item type, so adding a key here never moves a loan offer.
+    // An absent, blank or non-numeric entry falls back to the 88 above.
+    purchaseToValuePercentByItemType: {
+      jewellery: 86,
+    },
     loanToValuePercent: 75,
     // Reduces live spot by this percent before purchase/loan ratios apply
     // (see gold.js getSpotOfferMultiplier). Set to 0 to disable.
-    spotDiscountPercent: 2,
+    // This is the "top line" discount, spot price to working price (Sam,
+    // 21 Jul: "take 2% off the spot price BEFORE applying the discounting
+    // below" to purchases and loans). It therefore reduces loan offers as
+    // well as purchases, by design. 2 -> 3 on 9 Sep 2026 (869eu8kr1).
+    spotDiscountPercent: 3,
     loanTermMonths: 6,
     rateBands: LOAN_RATE_BANDS,
   },

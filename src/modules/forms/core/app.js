@@ -183,8 +183,19 @@ setFormApp(formApp);
 // ============================================================================
 // DOCUMENT-LEVEL ATTRIBUTION FALLBACK
 // ============================================================================
-// Keep Webflow's own form serialization honest: condition-hidden controls
-// must be disabled before any submit listener reads the form.
+// Disabling does NOT remove a control from Webflow's payload. Its serialiser
+// selects `:input:not([type="submit"]):not([type="file"]):not([type="button"])`
+// with no `:not(:disabled)`, and jQuery's `.val()` reads disabled elements — so
+// a disabled control is still submitted, with its value. Only RENAMING removes a
+// key, and only the names in submit.singleValueFieldNames are renamed.
+//
+// What this does buy: the browser's own constraint validation skips a disabled
+// control, so a conditional `required` cannot block submit by trying to focus an
+// invisible field. That is the reason to keep it.
+//
+// Verbatim serialiser: private repo local/webflow-runtime/serialiser.extract.js.
+// To assert what a form submits, use testing/webflow-serialise.js — never
+// new FormData(form), which omits disabled controls and so under-reports.
 (function initSubmitControlGuard() {
   if (typeof document === 'undefined') return;
 

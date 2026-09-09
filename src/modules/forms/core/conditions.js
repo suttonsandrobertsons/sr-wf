@@ -919,6 +919,12 @@ export const formAttribution = {
     const firstPage = attribution.first_page || attribution.first_landing_url || this.cleanUrl(window.location.href);
     const lastPage = this.cleanUrl(window.location.href);
 
+    // CAPTURED fields, not derived ones — see the four kinds in SIMPLE.md.
+    // Every value below comes from the browser or the stored session, so none of
+    // it can be authored in the Designer or asserted from markup: it does not
+    // exist until a real visit. These names are the Zapier contract just as much
+    // as the gold_* ones, so renaming one silently stops attribution reaching
+    // Zoho rather than throwing.
     formValues.setHidden(root, 'current_url', lastPage);
     formValues.setHidden(root, 'first_landing_url', firstPage);
     formValues.setHidden(root, 'first_page', firstPage);

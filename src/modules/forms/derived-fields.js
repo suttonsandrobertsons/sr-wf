@@ -1,5 +1,33 @@
 import { formValues } from './core/fields.js'
 
+// This file's name is misleading and SIMPLE.md explains why: "derived" covers
+// four different kinds of hidden field, and only two of them are business
+// rules. What lives HERE is:
+//
+//   NORMALISED  `<key>_formatted`, appointment_start_datetime,
+//               appointment_end_datetime — parsing and minute arithmetic over
+//               free input. Cannot be expressed as Designer markup.
+//   DECIDED     New_Lead_Type, combined_asset_type — outcomes chosen from
+//               enumerable answers.
+//
+// Do NOT move New_Lead_Type to a Designer truth table. It was authored that way
+// once, as four same-named hidden inputs, and could only ever carry ONE lead
+// type: the singleValueFieldNames dedup submits exactly one control of a
+// same-named group, and this value accumulates ("SHP Customer, Loan Customer,
+// Consignment Customer"). One row per COMBINATION would work but grows
+// combinatorially — two follow-ups is five rows, a third would be nine — where
+// the code below handles any number. See docs/developer/form-behaviour.md
+// section 7 in the private repository for the five combining mechanisms and
+// which to reach for.
+//
+// What does NOT live here, despite sounding like it should: environment capture
+// (first_page, GCLID, lead_reference and friends — core/conditions.js) and all
+// gold money (gold.js). Look there first.
+//
+// If the two DECIDED fields ever move to the Designer, what remains is date and
+// time formatting, and this file should be renamed for that rather than kept as
+// a home for leftovers.
+
 function fieldType(control) {
   return String(
     control.closest('[data-form-field-type]')?.getAttribute('data-form-field-type')

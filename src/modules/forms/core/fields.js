@@ -1393,10 +1393,18 @@ export const formFields = {
 // derived-fields.js instead when the value needs a rule a join cannot express:
 // arithmetic, a conditional pick, or a mapping to differently-named outputs.
 //
-// The empty case differs from a derived field: an empty group DISABLES its
-// hidden input, so the field is absent from the POST entirely, whereas an
-// empty derived field submits blank. Zapier mappings must test presence here,
-// emptiness there.
+// The empty case does NOT differ from a derived field, despite what this
+// comment used to claim. An empty group disables its hidden input — but
+// Webflow's serialiser ignores `disabled` (no `:not(:disabled)` in its
+// selector, and `.val()` reads disabled elements), so the field is still
+// submitted, empty. Measured live on /get-a-quote: `brands=""` is in the
+// payload. Both this and an empty derived field arrive as an empty value, so a
+// Zapier mapping cannot distinguish them by presence.
+//
+// The ONLY mechanism here that produces a genuinely absent key is the
+// single-submit dedup (submit.singleValueFieldNames), because it RENAMES the
+// losers to `_disabled_<name>`. Renaming is the only thing Webflow respects.
+// See docs/developer/twins.md in the private repository.
 export const formFieldGroups = {
   render(form) {
     this.syncFields(form);

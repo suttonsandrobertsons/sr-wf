@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from 'vitest'
+import { beforeEach, describe, expect, it, afterEach } from 'vitest'
 import { goldCalculationTestHooks } from '../gold.js'
 import { formConfig } from '../config.js'
 
@@ -18,6 +18,33 @@ const quote = {
   updatedAt: 1781172000,
   source: 'test',
 }
+
+// The absolute money figures throughout this file were validated against the
+// client's own pricing spreadsheet in July 2026, at a 2% spot discount and a
+// flat 88% purchase rate. They are parity fixtures for the FORMULA and its
+// MROUND-to-50p behaviour, so they are pinned to those rates rather than
+// rewritten every time a rate moves — rewriting them would replace the
+// client-validated numbers with our own arithmetic.
+//
+// The live rates are asserted separately, by name and by resulting figure, in
+// "live configured rates (869eu8kr1)" at the end of this file. If you change a
+// rate in config.js, that block is what should fail, not these.
+const PINNED = {
+  spotDiscountPercent: 2,
+  purchaseToValuePercent: 88,
+  purchaseToValuePercentByItemType: {},
+}
+const LIVE_RATES = { ...formConfig.gold }
+
+beforeEach(() => {
+  Object.assign(formConfig.gold, PINNED)
+})
+
+afterEach(() => {
+  formConfig.gold.spotDiscountPercent = LIVE_RATES.spotDiscountPercent
+  formConfig.gold.purchaseToValuePercent = LIVE_RATES.purchaseToValuePercent
+  formConfig.gold.purchaseToValuePercentByItemType = LIVE_RATES.purchaseToValuePercentByItemType
+})
 
 function summaryFor(items, enquiryType = 'loan') {
   const estimates = items.map((item) => {
@@ -336,7 +363,8 @@ describe('gold calculator financials', () => {
     expect(form.querySelector('[name="gold_item_type_1"][value="bar"]')).toBeTruthy()
 
     expect(form.querySelector('[name="gold_item_1_type"]').value).toBe('Jewellery')
-    expect(form.querySelector('[name="gold_item_1_metal_type"]').value).toBe('9')
+    // "9ct Gold" is Zoho's own Item_N_Metal option; the bare "9" matched none.
+    expect(form.querySelector('[name="gold_item_1_metal_type"]').value).toBe('9ct Gold')
     expect(form.querySelector('[name="gold_item_1_weight_grams"]').value).toBe('1')
     expect(form.querySelector('[name="gold_item_1_quantity"]').value).toBe('2')
     expect(form.querySelector('[name="gold_item_1_label"]').value).toBe('9ct jewellery')
@@ -1256,5 +1284,343 @@ describe('gold group discounts — extended coverage', () => {
     expect(est.manual).toBe(true)
     expect(est.purchaseValue).toBe(0)
     expect(est.loanValue).toBe(0)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 869eu8kr1 — the September 2026 change round. These run on the LIVE config,
+// undoing the top-level pin, so a rate edited in config.js fails HERE.
+// ---------------------------------------------------------------------------
+describe('live configured rates (869eu8kr1)', () => {
+  beforeEach(() => {
+    Object.assign(formConfig.gold, LIVE_RATES)
+  })
+
+  it('carries the rates the client asked for', () => {
+    // Sam, 25 Aug 2026: top line discount 2% -> 3%; jewellery only 88% -> 86%,
+    // coins and bars remain at 88%.
+    expect(formConfig.gold.spotDiscountPercent).toBe(3)
+    expect(formConfig.gold.purchaseToValuePercent).toBe(88)
+    expect(formConfig.gold.purchaseToValuePercentByItemType.jewellery).toBe(86)
+    expect(getSpotOfferMultiplier()).toBeCloseTo(0.97, 10)
+  })
+
+  it('applies 86% to jewellery purchases and 88% to coins and bars', () => {
+    expect(getOfferRatio('purchase', 'jewellery')).toBeCloseTo(0.86, 10)
+    expect(getOfferRatio('purchase', 'coin')).toBeCloseTo(0.88, 10)
+    expect(getOfferRatio('purchase', 'bar')).toBeCloseTo(0.88, 10)
+  })
+
+  it('leaves every loan ratio on loanToValuePercent, jewellery included', () => {
+    // The per-item-type table is consulted for purchases only. If this ever
+    // fails, a jewellery purchase rate has started moving loan offers.
+    expect(getOfferRatio('loan', 'jewellery')).toBeCloseTo(0.75, 10)
+    expect(getOfferRatio('loan', 'coin')).toBeCloseTo(0.75, 10)
+    expect(getOfferRatio('loan', undefined)).toBeCloseTo(0.75, 10)
+  })
+
+  it('falls back to the flat 88% for an unknown item type, never to 0 or 1', () => {
+    // A blank fallback quoting 1 would offer 100% of spot; 0 would offer
+    // nothing. Both look plausible on screen, so they are guarded explicitly.
+    const ratio = getOfferRatio('purchase', 'something-else')
+    expect(ratio).toBeCloseTo(0.88, 10)
+    expect(ratio).not.toBe(1)
+    expect(ratio).not.toBe(0)
+  })
+
+  it('ignores a blank or non-numeric per-item-type entry', () => {
+    const original = formConfig.gold.purchaseToValuePercentByItemType
+    try {
+      for (const bad of [{ jewellery: '' }, { jewellery: 'abc' }, { jewellery: 0 }, {}]) {
+        formConfig.gold.purchaseToValuePercentByItemType = bad
+        expect(getOfferRatio('purchase', 'jewellery')).toBeCloseTo(0.88, 10)
+      }
+    } finally {
+      formConfig.gold.purchaseToValuePercentByItemType = original
+    }
+  })
+
+  // The worked examples sent to the client for sign-off. £100/g keeps the
+  // arithmetic checkable by hand against their pricing sheet.
+  it('quotes 18ct jewellery, 15g at £100/g as £937.50 purchase and £817.50 loan', () => {
+    const item = { itemType: 'jewellery', metalType: '18', weightGrams: '15', quantity: '1' }
+    const estimate = calculateEstimate(item, findPricingRow(pricingRows, item), 100)
+
+    expect(estimate.purchaseValue).toBe(937.5)
+    expect(estimate.loanValue).toBe(817.5)
+    // The displayed spot stays on RAW spot — the discount is offers-only.
+    expect(estimate.spotValue).toBe(1125)
+    expect(estimate.calculation.purchasePercent).toBe(86)
+    expect(estimate.calculation.loanPercent).toBe(75)
+  })
+
+  it('keeps a Sovereign on 88%, still reduced by the 3% top line', () => {
+    const item = { itemType: 'coin', bullionName: 'sovereign', quantity: '1' }
+    const estimate = calculateEstimate(item, findPricingRow(pricingRows, item), 100)
+
+    expect(estimate.purchaseValue).toBe(625)
+    expect(estimate.loanValue).toBe(533)
+    expect(estimate.calculation.purchasePercent).toBe(88)
+  })
+
+  it('composes a row extraDiscountPercent on top of the jewellery rate, not instead of it', () => {
+    // Francs and American Eagles carry a 6% row discount. 86% must become
+    // 86 x 0.94 = 80.84%, never 6% replacing the rate.
+    const rows = normalizePricingRows([
+      { itemType: 'Jewellery', label: '18ct discounted', purityCarats: '18', weightGrams: '10', extraDiscountPercent: '6' },
+    ])
+    const item = { itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }
+    const estimate = calculateEstimate(item, rows[0], 100)
+
+    expect(estimate.calculation.purchasePercent).toBeCloseTo(80.84, 2)
+    expect(estimate.calculation.loanPercent).toBeCloseTo(70.5, 2)
+    expect(estimate.purchaseValue).toBe(590)
+    expect(estimate.loanValue).toBe(515)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// bullion_name_N is the value that actually reaches Zoho, and nothing asserted
+// it before this change round.
+// ---------------------------------------------------------------------------
+describe('bullion_name_N — the single item description (869eu8kr1)', () => {
+  function slotValues(items) {
+    const form = document.createElement('form')
+    document.body.append(form)
+    persistItemSlotFields(form, summaryFor(items, 'sell'))
+    const read = (name) => form.querySelector(`[name="${name}"]`)?.value
+    const out = {
+      description1: read('bullion_name_1'),
+      bullionType1: read('gold_item_1_bullion_type'),
+      description2: read('bullion_name_2'),
+      metalType1: read('gold_item_1_metal_type'),
+      label1: read('gold_item_1_label'),
+      description5: read('bullion_name_5'),
+    }
+    form.remove()
+    return out
+  }
+
+  it('describes jewellery as "<carat>ct Gold", letting the Zap append the type', () => {
+    // The live Zap composes Item_N_Description as
+    // "{bullion_name_N} {qty} {gold_item_N_type}" — verified against stored
+    // leads ("100g Gold Bar 1 Bar", "9ct 2 Jewellery"). Emitting the full
+    // "9ct Gold Jewellery" here would read "9ct Gold Jewellery 2 Jewellery".
+    expect(slotValues([{ itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' }]).description1)
+      .toBe('9ct Gold')
+    expect(slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }]).description1)
+      .toBe('18ct Gold')
+  })
+
+  it('emits the carat as a valid Item_N_Metal option, not the bare number', () => {
+    // Zoho's Item_N_Metal picklist spells these "9ct Gold" ... "24ct Gold".
+    // The bare "9" matched no option on the 16 Aug lead.
+    const v = slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }])
+    expect(v.metalType1).toBe('18ct Gold')
+  })
+
+  it('leaves metal empty for coins and bars, which carry no carat', () => {
+    expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).metalType1).toBe('')
+  })
+
+  it('leaves coin and bar descriptions on their CMS label, unchanged', () => {
+    // His note against both was "No change, I don't think." These already
+    // arrive as valid Item_N_Bullion_Type options.
+    expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).description1)
+      .toBe('Sovereign')
+    expect(slotValues([{ itemType: 'bar', bullionName: '1g_bar', quantity: '1' }]).description1)
+      .toBe('1g Gold Bar')
+  })
+
+  it('keeps the CMS label on gold_item_N_label, untouched', () => {
+    // label is display copy and feeds the on-screen item list; only the
+    // Zoho-facing bullion_name_N carries the combined description.
+    const v = slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }])
+    expect(v.label1).toBe('18ct jewellery')
+  })
+
+  it('sends no Bullion Type for a manual "Other" or "Unsure" row', () => {
+    // findPricingRow synthesises label "Other"/"Unsure" for the unmatched
+    // options. Neither is among the 38 Item_N_Bullion_Type options, so sending
+    // it would store an unlisted string — silently unusable, which is the
+    // defect this field was added to remove.
+    expect(slotValues([{ itemType: 'coin', bullionName: 'other', quantity: '1' }]).bullionType1).toBe('')
+    expect(slotValues([{ itemType: 'bar', bullionName: 'unsure', quantity: '1' }]).bullionType1).toBe('')
+  })
+
+  it('sends a Bullion Type only for coins and bars, never for jewellery', () => {
+    // Item_N_Bullion_Type is a coin/bar picklist. An unlisted jewellery string
+    // is accepted and stored by Zoho, so it fails as DATA rather than as a
+    // write — nothing errors, it just cannot be grouped or reported.
+    expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).bullionType1)
+      .toBe('Sovereign')
+    expect(slotValues([{ itemType: 'bar', bullionName: '1g_bar', quantity: '1' }]).bullionType1)
+      .toBe('1g Gold Bar')
+    expect(slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }]).bullionType1)
+      .toBe('')
+  })
+
+  it('always sends Gold as slot 1 asset type, even with nothing priced', () => {
+    // 869eu8kr1 item 3. The Describe Items route parses no items, so slot 1
+    // used to submit an empty asset type and the lead arrived untagged.
+    const form = document.createElement('form')
+    document.body.append(form)
+    persistItemSlotFields(form, summaryFor([], 'sell'))
+    const read = (n) => form.querySelector(`[name="${n}"]`)?.value
+
+    expect(read('gold_item_1_asset_type')).toBe('Gold')
+    // Slots 2-5 stay gated, so an unused slot cannot create a phantom row.
+    expect(read('gold_item_2_asset_type')).toBe('')
+    expect(read('gold_item_5_asset_type')).toBe('')
+    form.remove()
+  })
+
+  it('writes an empty description for an unused slot', () => {
+    expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).description5).toBe('')
+  })
+
+  it('numbers each slot independently across a mixed lead', () => {
+    const v = slotValues([
+      { itemType: 'jewellery', metalType: '22', weightGrams: '5', quantity: '1' },
+      { itemType: 'coin', bullionName: 'sovereign', quantity: '2' },
+    ])
+    expect(v.description1).toBe('22ct Gold')
+    expect(v.description2).toBe('Sovereign')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// gold_purchase_rate_percent used to hardcode the flat config value, so a
+// jewellery lead claimed 88% while 86% was applied. It now reports the rates
+// actually used.
+// ---------------------------------------------------------------------------
+describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () => {
+  beforeEach(() => {
+    Object.assign(formConfig.gold, LIVE_RATES)
+  })
+
+  function submitted(items, enquiryType = 'sell') {
+    const form = document.createElement('form')
+    form.innerHTML = `<input type="radio" name="enquiry_type" value="${enquiryType}" checked>`
+    persistSummary(form, summaryFor(items, enquiryType))
+    return Object.fromEntries(new FormData(form).entries())
+  }
+
+  it('reports 86 for an all-jewellery lead', () => {
+    const f = submitted([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }])
+    expect(f.gold_purchase_rate_percent).toBe('86')
+    expect(f.gold_loan_rate_percent).toBe('75')
+  })
+
+  it('reports 88 for an all-coin lead', () => {
+    const f = submitted([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }])
+    expect(f.gold_purchase_rate_percent).toBe('88')
+  })
+
+  it('reports both rates, ascending, for a mixed lead', () => {
+    // Five slots means a lead can genuinely mix types, and then no single
+    // rate is true. Saying "86, 88" beats picking one and being wrong.
+    const f = submitted([
+      { itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' },
+      { itemType: 'coin', bullionName: 'sovereign', quantity: '1' },
+    ])
+    expect(f.gold_purchase_rate_percent).toBe('86, 88')
+    expect(f.gold_loan_rate_percent).toBe('75')
+  })
+
+  it('excludes a row extraDiscountPercent from the reported rate', () => {
+    // The Francs/Eagles 6% row discount belongs to the row, not the rate; its
+    // effect is already visible in the per-item values.
+    const rows = normalizePricingRows([
+      { itemType: 'Coin', bullionName: 'franc', label: '20 Franc', purityPercent: '90', weightGrams: '5.8', extraDiscountPercent: '6' },
+    ])
+    const item = { itemType: 'coin', bullionName: 'franc', quantity: '1' }
+    const summary = calculateGoldSummary([calculateEstimate(item, rows[0], 100)], 'sell', { spotGbpPerGram: 100, source: 't', updatedAt: 1781172000 })
+    const form = document.createElement('form')
+    form.innerHTML = `<input type="radio" name="enquiry_type" value="sell" checked>`
+    persistSummary(form, summary)
+
+    expect(new FormData(form).get('gold_purchase_rate_percent')).toBe('88')
+  })
+
+  it('falls back to the flat config rate when nothing was priced', () => {
+    // The Describe Items route prices no items, so it keeps reporting exactly
+    // what it always did rather than going blank.
+    const f = submitted([])
+    expect(f.gold_purchase_rate_percent).toBe('88')
+    expect(f.gold_loan_rate_percent).toBe('75')
+  })
+})
+
+// ---------------------------------------------------------------------------
+// addItem() clones the previous row, so a row can arrive already carrying the
+// previous row's EXPANDED rule. Rewriting in place could never fix that.
+// ---------------------------------------------------------------------------
+describe('repeater condition rules survive cloning (multi-item weight reveal)', () => {
+  function buildForm() {
+    const form = document.createElement('form')
+    form.innerHTML = `
+      <div data-form-gold-item>
+        <div data-form-field="item_type">
+          <input type="radio" id="item_type_coin" name="item_type" value="coin" checked>
+        </div>
+        <div data-form-field="weight_grams" data-form-show-if="item_type = jewellery OR bullion_name = other">
+          <input id="weight_grams" name="weight_grams" value="">
+        </div>
+        <div data-form-field="bullion_name" data-form-show-if="item_type = coin">
+          <select id="bullion_name_coin" name="bullion_name">
+            <option value=""></option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <div data-form-field="bullion_name" data-form-show-if="item_type = bar">
+          <select id="bullion_name_bar" name="bullion_name">
+            <option value=""></option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+    `
+    document.body.append(form)
+    return form
+  }
+
+  const weightRule = (item) =>
+    item.querySelector('[data-form-field="weight_grams"]').getAttribute('data-form-show-if')
+
+  it('re-indexes a cloned row instead of leaving it pointing at row 1', () => {
+    const form = buildForm()
+    updateRepeaterState({ form })
+
+    const first = form.querySelector('[data-form-gold-item]')
+    expect(weightRule(first)).toContain('gold_bullion_name_1')
+
+    // Exactly what addItem() does: clone the last row, append, re-sync.
+    form.append(first.cloneNode(true))
+    updateRepeaterState({ form })
+
+    const [, second] = form.querySelectorAll('[data-form-gold-item]')
+    const rule = weightRule(second)
+
+    // The defect: `gold_bullion_name_1_coin` cannot be re-matched by the
+    // base-name pattern, so row 2 kept row 1's reference and its weight field
+    // never revealed on its own selection.
+    expect(rule).toContain('gold_bullion_name_2')
+    expect(rule).not.toContain('gold_bullion_name_1')
+    expect(weightRule(first)).toContain('gold_bullion_name_1')
+    form.remove()
+  })
+
+  it('stays stable when the same row is synced repeatedly', () => {
+    const form = buildForm()
+    const item = form.querySelector('[data-form-gold-item]')
+
+    updateRepeaterState({ form })
+    const once = weightRule(item)
+    updateRepeaterState({ form })
+    updateRepeaterState({ form })
+
+    expect(weightRule(item)).toBe(once)
+    form.remove()
   })
 })
