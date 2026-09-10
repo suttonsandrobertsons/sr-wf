@@ -343,6 +343,64 @@ describe('form UI regressions', () => {
     })
   })
 
+  it('renames EVERY control of a choose-one group when they are on a step the customer has left', () => {
+    // The trap, recorded so it is not proposed as a fix a second time.
+    //
+    // prepareChooseOneControls picks the active control with
+    // !isStepHidden(control) (core/fields.js). On a multi-step form the
+    // customer submits from the LAST step, so a group living on an earlier step
+    // has no active member and every one of them is renamed _disabled_*.
+    //
+    // This is why data-form-submit-single must NOT be used to fix the
+    // get-a-quote brand fields: they sit on step 2 and submit happens on step
+    // 4, so Brand would arrive EMPTY on every lead rather than merely wrong.
+    // Use the [data-form-field-group] aggregate instead, which reads only
+    // non-hidden controls and is already in the payload as `brands`.
+    document.body.innerHTML = `
+      <form data-form="multi">
+        <div data-form-step>
+          <div data-form-field="watch_brand">
+            <select name="watch_brand" data-form-submit-single="brand">
+              <option value="Rolex" selected>Rolex</option>
+            </select>
+          </div>
+          <div data-form-field="jewellery_brand">
+            <select name="jewellery_brand" data-form-submit-single="brand">
+              <option value="Cartier" selected>Cartier</option>
+            </select>
+          </div>
+        </div>
+        <div data-form-step>
+          <input name="email" value="dev@dev.com">
+        </div>
+      </form>
+    `
+    const root = document.querySelector('form')
+    const form = bootForm(root)
+    form.steps = Array.from(root.querySelectorAll('[data-form-step]'))
+    formSteps.configure?.(form)
+
+    const onStep = (index) => {
+      form.steps.forEach((step, i) => formDom.setState(step, 'step-hidden', i !== index))
+      formFields.prepareControlsForSubmit(form)
+      return Object.fromEntries(formPayload(form))
+    }
+
+    // While the customer is ON step 1 the mechanism works as advertised: the
+    // first readable control wins and keeps its name. This half is asserted so
+    // the test below cannot pass just because nothing was grouped at all.
+    const onBrandStep = onStep(0)
+    expect(onBrandStep.watch_brand).toBe('Rolex')
+    expect(onBrandStep._disabled_jewellery_brand).toBe('Cartier')
+
+    // At submit the customer is on the last step, and now NOTHING wins.
+    const atSubmit = onStep(form.steps.length - 1)
+    expect(atSubmit.watch_brand).toBeUndefined()
+    expect(atSubmit.jewellery_brand).toBeUndefined()
+    expect(atSubmit._disabled_watch_brand).toBe('Rolex')
+    expect(atSubmit._disabled_jewellery_brand).toBe('Cartier')
+  })
+
   // Was a choose-one test over four same-named hidden inputs. box_and_papers is
   // now a business rule, so this asserts the rule wins even while the old
   // Designer inputs are still on the page — the state during migration.

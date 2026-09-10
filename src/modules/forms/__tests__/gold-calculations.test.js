@@ -540,6 +540,33 @@ describe('gold calculator financials', () => {
   })
 
 
+  it('shows the purchase figure for "Sell My Items" even when the loan rate is higher', () => {
+    // The live radio submits "Sell My Items", which normalizeSlug turns into
+    // "sell_my_items". Until 10 Sep 2026 getDisplayValue only tested for
+    // "sell", so sell leads fell through to Math.max(purchase, loan). That
+    // gave the right answer only because purchase (86-88%) beats loan (75%).
+    //
+    // This test inverts the rates so the fallback would give the WRONG answer,
+    // which is what makes it a real assertion rather than a tautology.
+    // Restored here, not in afterEach: beforeEach only pins the three rates in
+    // PINNED, so leaving this set leaks into every later test in the file.
+    const realLoanRate = formConfig.gold.loanToValuePercent
+    try {
+      formConfig.gold.loanToValuePercent = 95
+
+      const item = { itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }
+      const estimate = calculateEstimate(item, findPricingRow(pricingRows, item), quote.spotGbpPerGram)
+
+      expect(estimate.loanValue).toBeGreaterThan(estimate.purchaseValue)
+      expect(getDisplayValue(estimate, 'sell_my_items')).toBe(estimate.purchaseValue)
+      expect(getDisplayValue(estimate, 'loan')).toBe(estimate.loanValue)
+      // Unanswered still shows the better of the two.
+      expect(getDisplayValue(estimate, '')).toBe(estimate.loanValue)
+    } finally {
+      formConfig.gold.loanToValuePercent = realLoanRate
+    }
+  })
+
   it('interest fields reconcile: monthly × term = total, loan + total = repayment', () => {
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`

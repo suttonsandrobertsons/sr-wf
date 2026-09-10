@@ -764,9 +764,27 @@ function calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot = estim
   };
 }
 
+// Which figure the customer is shown, from what they said they want to do.
+//
+// enquiryType is normalizeSlug'd, so the live radio values arrive as "loan" and
+// "sell_my_items". Until 10 Sep 2026 this tested for "sell", which no live form
+// has ever submitted, so every sell lead fell through to the Math.max fallback.
+// That returned the right number by luck — the purchase rate (86-88%) is above
+// the loan rate (75%), so the max IS the purchase value — and it would have
+// started showing loan figures on sell leads the moment a rate crossed over.
+// The client has already floated changing the purchase rate.
+//
+// "consign" is kept: consignment is gone from the gold calculator but the value
+// still exists on the other lead forms, and a consignment enquiry is priced as
+// a sale.
+//
+// The fallback stays for an unanswered enquiry_type, where showing the better
+// of the two is the kindest honest answer.
 function getDisplayValue(estimate, enquiryType) {
   if (enquiryType === "loan") return estimate.loanValue;
-  if (enquiryType === "sell" || enquiryType === "consign") return estimate.purchaseValue;
+  if (enquiryType === "sell" || enquiryType === "sell_my_items" || enquiryType === "consign") {
+    return estimate.purchaseValue;
+  }
   return Math.max(estimate.purchaseValue, estimate.loanValue);
 }
 
