@@ -4,7 +4,9 @@ import { printQuoteSheet, quoteSheetTestHooks } from "../quote-sheet.js";
 import { formatMoney } from "../numbers.js";
 import { MANUAL_QUOTE_PROMPT } from "../gold.js";
 
-const { readQuote, sheet, MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE } = quoteSheetTestHooks;
+const {
+  readQuote, sheet, MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE, today, printedAt,
+} = quoteSheetTestHooks;
 
 function buildForm(fields) {
   const form = document.createElement("form");
@@ -129,6 +131,24 @@ describe("quote sheet", () => {
 
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("stamps the print to the second, in UK time whatever the device says", () => {
+    // Requested so a figure on paper can be reconciled against the lead
+    // record. The sheet renders on the customer's device, so an unpinned
+    // timestamp would print their clock: a Dubai customer reading 15:27:31
+    // for a lead Zoho logged at 12:27:31 is worse than no timestamp, because
+    // it looks precise while disagreeing.
+    const summer = new Date("2026-09-10T11:27:31Z");
+    const winter = new Date("2026-01-10T11:27:31Z");
+
+    expect(today(summer)).toBe("10 September 2026");
+    expect(printedAt(summer)).toBe("12:27:31 BST");
+    // The same instant in January is GMT, and the abbreviation follows.
+    expect(printedAt(winter)).toBe("11:27:31 GMT");
+
+    const html = sheet(readQuote(buildForm(TWO_ITEMS)));
+    expect(html).toMatch(/\d{2}:\d{2}:\d{2} (BST|GMT)/);
   });
 
   it("titles the sheet with the calculator page's own h1", () => {

@@ -148,10 +148,28 @@ function money(value) {
   return Number.isFinite(number) && value !== "" ? formatMoney(number) : "";
 }
 
-// Today, in the format the rest of the site uses.
-function today() {
-  return new Date().toLocaleDateString("en-GB", {
-    day: "numeric", month: "long", year: "numeric",
+// When the sheet was printed, to the second, so a figure on paper can be
+// reconciled against the lead record it came from.
+//
+// PINNED TO EUROPE/LONDON, deliberately. The sheet renders on the customer's
+// own device, so an unpinned toLocaleString prints THEIR clock: a customer in
+// Dubai would read 15:40:12 for a lead Zoho logged at 12:40:12, which is worse
+// than no timestamp because it looks precise while disagreeing. The zone
+// abbreviation is printed with it — a bare time is only unambiguous to a reader
+// who already assumes UK time, and the point of the timestamp is settling
+// disputes with people who do not share that assumption.
+const LONDON = "Europe/London";
+
+function today(now = new Date()) {
+  return now.toLocaleDateString("en-GB", {
+    day: "numeric", month: "long", year: "numeric", timeZone: LONDON,
+  });
+}
+
+function printedAt(now = new Date()) {
+  return now.toLocaleTimeString("en-GB", {
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false, timeZone: LONDON, timeZoneName: "short",
   });
 }
 
@@ -196,6 +214,7 @@ function readQuote(root) {
   return {
     reference: field(root, "lead_reference"),
     date: today(),
+    time: printedAt(),
     enquiry: ENQUIRY_LABELS[field(root, "enquiry_type")] || "",
     // Over the top rate band there is no loan on offer; the calculator writes
     // "Enquire" into its loan-terms outputs rather than a number. The sheet
@@ -328,7 +347,7 @@ function sheet(quote) {
 </style></head><body>
   <div class="head">
     <img src="${LOGO_SRC}" alt="Suttons &amp; Robertsons">
-    <div class="meta"><b>${esc(quote.reference)}</b><br>${esc(quote.date)}</div>
+    <div class="meta"><b>${esc(quote.reference)}</b><br>${esc(quote.date)}<br>${esc(quote.time)}</div>
   </div>
 
   <h1>${esc(SHEET_TITLE)}</h1>
@@ -426,5 +445,5 @@ export function initQuoteSheet() {
 
 export const quoteSheetTestHooks = {
   readQuote, readItems, itemSlots, sheet, itemRow, money,
-  MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE,
+  MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE, today, printedAt,
 };
