@@ -7,6 +7,16 @@
 
 const FORM_ENDPOINT = "**/api/v1/form/**";
 
+// Where a captured payload is written for the twins to resolve.
+//
+// These specs produce the one thing the private repo's Zapier twin cannot make
+// for itself: a payload from the REAL published form, with real CMS options and
+// the real serialiser. The twin then answers "what would Zoho store?" without
+// anyone submitting a lead. See tools/twins/chain/__tests__/live-capture.test.js
+// in the private repo, which is skipped when this directory is empty.
+const CAPTURE_DIR = process.env.SR_CAPTURE_DIR
+  || new URL("../.captures/", import.meta.url).pathname;
+
 /**
  * Intercept the form POST. Returns a getter for the captured field map.
  *
@@ -37,6 +47,29 @@ export async function installSubmitCapture(page) {
       }
       return out;
     },
+    /**
+     * Write the captured payload for the twins, flattened to Zapier's shape.
+     *
+     * Zapier receives one value per key, so duplicates collapse the way
+     * Webflow's serialiser leaves them: last in DOM order wins.
+     */
+    save: async (name) => {
+      if (!captured.length) throw new Error(`nothing captured for ${name}`);
+      const params = new URLSearchParams(captured[0]);
+      const flat = {};
+      for (const [key, value] of params.entries()) {
+        const match = key.match(/^fields\[(.+)\]$/);
+        if (match) flat[match[1]] = value;
+      }
+      const { mkdir, writeFile } = await import("node:fs/promises");
+      await mkdir(CAPTURE_DIR, { recursive: true });
+      await writeFile(
+        `${CAPTURE_DIR}/${name}.json`,
+        `${JSON.stringify({ capturedAt: new Date().toISOString(), form: name, payload: flat }, null, 2)}\n`,
+      );
+      return flat;
+    },
+
     // Single value for a field, or null. Fails loudly on duplicates so a
     // regression that submits two values under one name can't read as a pass.
     one: (map, name) => {

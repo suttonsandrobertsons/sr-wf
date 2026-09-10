@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
-import { pickRadio, fieldState, LEAD_FORMS } from "./helpers/forms.js";
+import { pickRadio, fieldState, LEAD_FORMS, installSubmitCapture, fillAndSubmit } from "./helpers/forms.js";
 
-// No submissions here — these tests assert markup and conditions-engine state only.
+// No REAL submissions here. installSubmitCapture intercepts Webflow's form
+// endpoint and answers 200 itself, so a payload can be asserted without a lead
+// ever reaching Webflow, Zapier or Zoho.
 
 const ENQUIRY_FORMS = LEAD_FORMS;
 
@@ -152,60 +154,64 @@ test.describe("gold calculator — enquiry still drives the quote basis", () => 
   });
 });
 
-test.describe("box_and_papers — the migration guard", () => {
-  // box_and_papers moved from four same-named Designer inputs to a business
-  // rule in submit-values/business-rules.js on 9 Sep 2026. The inputs are still
-  // on the page and must stay there until the new bundle SHA is live.
+test.describe("box_and_papers — computed in code, not authored", () => {
+  // The four same-named Designer inputs were deleted on 10 Sep 2026, after the
+  // bundle carrying computeBoxAndPapers went live. This replaced the
+  // deployment-order guard that watched for exactly that moment.
   //
-  // This deliberately asserts PRESENCE only, never the submitted value. The
-  // two bundles differ at render time and this spec runs against whichever is
-  // published:
+  // WHY THE PAYLOAD IS NOT ASSERTED HERE. box_and_papers exists only on
+  // get-a-quote, and that form cannot be submitted in a smoke test: step 3
+  // carries two REQUIRED uploads, so reaching submit means POSTing real files
+  // to the Cloudflare Worker on every run. The payload is covered instead by
+  // __tests__/submit-values-ownership.test.js, which runs the rule through the
+  // faithful port of Webflow's serialiser, including the answered case and the
+  // never-asked case.
   //
-  //   deployed 9f8a106  box_and_papers is in chooseOneFieldNames, so the dedup
-  //                     renames at RENDER — before the questions are answered
-  //                     all four read _disabled_box_and_papers.
-  //   new bundle        renaming happens in formSubmitValues.apply() at SUBMIT,
-  //                     so at render all four still carry the plain name.
-  //
-  // A render-time name or payload assertion therefore passes against one and
-  // fails against the other. Asserting the real payload would mean submitting
-  // the form, which these specs must not do. The payload IS covered, against
-  // the faithful serialiser, by __tests__/submit-values-ownership.test.js —
-  // including this exact yes/yes case.
-  //
-  // What this guards is the deployment order in
-  // private/docs/developer/designer-cleanup.md: delete the inputs before the
-  // bundle is live and the deployed choose-one dedup has nothing to pick, so
-  // appointment_end_datetime empties and box_and_papers stops submitting.
-  //
-  // Delete this spec when the inputs are deleted.
+  // What only a live page can prove is below: that the authored inputs are
+  // really gone, and that the radios the rule reads are really still there.
 
-  test("the four Designer inputs are still present", async ({ page }) => {
+  test("the authored inputs are gone and the rule's sources remain", async ({ page }) => {
     await page.goto("/get-a-quote");
-
-    const found = await page.evaluate(async () => {
+    const counts = await page.evaluate(() => {
       const form = document.querySelector('[data-form="get-a-quote"]');
-      const pick = (n, v) => {
-        const r = [...form.querySelectorAll(`[name="${n}"]`)].find((x) => x.value === v);
-        if (!r) return false;
-        r.checked = true;
-        ["input", "change", "click"].forEach((t) => r.dispatchEvent(new Event(t, { bubbles: true })));
-        return true;
-      };
-      // The two questions appear for these asset types only.
-      pick("asset_type", "Watches");
-      await new Promise((r) => setTimeout(r, 700));
-      const answered = pick("original_box", "yes") && pick("original_paperwork", "yes");
-      await new Promise((r) => setTimeout(r, 800));
-
-      const values = ["Original Box and Papers", "Original Box Only", "Original Papers Only", "None"];
+      const n = (name) => form.querySelectorAll(`[name="${name}"]`).length;
       return {
-        answered,
-        authored: values.filter((v) => form.querySelector(`[value="${v}"]`)).length,
+        authored: n("box_and_papers"),
+        renamed: n("_disabled_box_and_papers"),
+        original_box: n("original_box"),
+        original_paperwork: n("original_paperwork"),
       };
     });
 
-    expect(found.answered, "the box/papers questions should be reachable").toBe(true);
-    expect(found.authored, "all four Designer inputs must remain until the SHA is bumped").toBe(4);
+    // Re-adding any would beat the computed value: duplicates collapse to the
+    // last in DOM order and the owned hidden is not guaranteed to be last.
+    expect(counts.authored, "no authored box_and_papers input may exist").toBe(0);
+    expect(counts.renamed, "nor a renamed leftover from the old dedup").toBe(0);
+
+    // Delete these by accident and the rule silently returns null forever.
+    expect(counts.original_box).toBeGreaterThan(0);
+    expect(counts.original_paperwork).toBeGreaterThan(0);
+  });
+
+  test("asks the box and papers questions only for the asset types that have them", async ({ page }) => {
+    // The rule's isAnswered guard depends on these being condition-hidden for
+    // every other asset type. If they ever showed for Gold, a gold lead would
+    // start carrying box_and_papers.
+    await page.goto("/get-a-quote");
+
+    // conditionHidden, not visible. These radios live on step 2 while
+    // asset_type is on step 1, so offsetParent is null for both answers and a
+    // visibility assertion passes for the wrong reason. conditionHidden is the
+    // conditions engine's own verdict and is independent of which step is open.
+    //
+    // Polled because the engine runs off a change event and takes a beat.
+    const boxHidden = () =>
+      fieldState(page, "get-a-quote", "original_box").then((s) => s.conditionHidden);
+
+    await pickRadio(page, "get-a-quote", "asset_type", "Watches");
+    await expect.poll(boxHidden, { message: "Watches should ask the box question" }).toBe(false);
+
+    await pickRadio(page, "get-a-quote", "asset_type", "Gold");
+    await expect.poll(boxHidden, { message: "Gold should not ask it" }).toBe(true);
   });
 });
