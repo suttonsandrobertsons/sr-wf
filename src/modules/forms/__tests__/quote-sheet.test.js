@@ -4,7 +4,7 @@ import { printQuoteSheet, quoteSheetTestHooks } from "../quote-sheet.js";
 import { formatMoney } from "../numbers.js";
 import { MANUAL_QUOTE_PROMPT } from "../gold.js";
 
-const { readQuote, sheet, MANUAL_PROMPT, LEGAL, PHONE } = quoteSheetTestHooks;
+const { readQuote, sheet, MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE } = quoteSheetTestHooks;
 
 function buildForm(fields) {
   const form = document.createElement("form");
@@ -129,6 +129,26 @@ describe("quote sheet", () => {
 
     expect(html).not.toContain("<script>");
     expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("titles the sheet with the calculator page's own h1", () => {
+    // "Gold calculator" named the tool; this names the document. It is also
+    // the default filename when the customer chooses Save as PDF.
+    const html = sheet(readQuote(buildForm(TWO_ITEMS)));
+
+    expect(SHEET_TITLE).toBe("Instant price for selling gold");
+    expect(html).toContain("<h1>Instant price for selling gold</h1>");
+    expect(html).toContain("<title>Instant price for selling gold — BURGE-R625-FPWN</title>");
+    expect(html).not.toContain("Gold calculator");
+  });
+
+  it("spends gold on the two Price Estimate figures, not every label", () => {
+    // Gold is the brand's accent colour. Navy is the default for micro-labels
+    // and column headers so the accent still means something.
+    const html = sheet(readQuote(buildForm(TWO_ITEMS)));
+
+    expect(html).toContain("text-transform:uppercase; color:var(--navy)");
+    expect(html).toContain(".figs .k { color:var(--gold) }");
   });
 
   it("uses the brand values measured from the live site", () => {

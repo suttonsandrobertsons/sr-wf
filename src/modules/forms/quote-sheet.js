@@ -115,6 +115,14 @@ const LEGAL =
 // The number in the site header, on this page and every other.
 const PHONE = "0800 182 2330";
 
+// The calculator page's own <h1>, in its own sentence casing. Chosen over
+// "Gold calculator" (a section heading further down that page) because that
+// names the tool rather than the document: the customer is not holding a
+// calculator, they are holding a price. Note it is sell-side wording and
+// prints on a loan quote too — the line directly beneath answers "What would
+// you like to do?" with "Loan against item" in that case.
+const SHEET_TITLE = "Instant price for selling gold";
+
 const LOGO_SRC =
   "https://cdn.prod.website-files.com/69f9fedf076067055e5a003f/6a0d90563499d746736461af_logo.svg";
 const FONTS =
@@ -217,7 +225,7 @@ function itemRow(item) {
 
 function sheet(quote) {
   return `<!doctype html>
-<html><head><meta charset="utf-8"><title>Gold calculator — ${esc(quote.reference)}</title>
+<html><head><meta charset="utf-8"><title>${esc(SHEET_TITLE)} — ${esc(quote.reference)}</title>
 <link rel="stylesheet" href="${FONTS}">
 <style>
   /* BRAND. Measured from the live site with Chromium computed styles on
@@ -274,9 +282,14 @@ function sheet(quote) {
        margin:44px 0 0; color:var(--midnight) }
   .rule { height:1px; background:var(--gold); margin-top:18px }
   .basis { margin-top:30px }
-  /* The site's uppercase micro-label, exactly: Jost 500, 12px, 0.07em. */
+  /* The site's uppercase micro-label, exactly: Jost 500, 12px, 0.07em.
+     Navy by default and gold only on the two Price Estimate figures. Gold is
+     the brand's accent — button and link colour — so it earns nothing when
+     every label carries it; spent once it points at the numbers the sheet
+     exists for. The gold hairline under the title is the other instance. */
   .k { font-family:var(--body); font-weight:500; font-size:12px; line-height:1;
-       letter-spacing:.07em; text-transform:uppercase; color:var(--gold) }
+       letter-spacing:.07em; text-transform:uppercase; color:var(--navy) }
+  .figs .k { color:var(--gold) }
   .v { font-size:16px; line-height:1.2; color:var(--navy); margin-top:7px }
   table { width:100%; border-collapse:collapse; margin-top:36px }
   /* Every column right-aligned except the description, each numeric column with
@@ -289,7 +302,7 @@ function sheet(quote) {
      it and sat lower than its first line; top-aligning every header starts all
      of them on the same line. */
   th { font-family:var(--body); font-weight:500; font-size:12px; line-height:1.25;
-       letter-spacing:.07em; text-transform:uppercase; color:var(--gold);
+       letter-spacing:.07em; text-transform:uppercase; color:var(--navy);
        vertical-align:top; padding-bottom:12px; border-bottom:1px solid var(--navy) }
   td { padding-top:15px; padding-bottom:15px; border-bottom:1px solid var(--rule);
        vertical-align:top }
@@ -316,7 +329,7 @@ function sheet(quote) {
     <div class="meta"><b>${esc(quote.reference)}</b><br>${esc(quote.date)}</div>
   </div>
 
-  <h1>Gold calculator</h1>
+  <h1>${esc(SHEET_TITLE)}</h1>
   <div class="rule"></div>
 
   <div class="basis">
@@ -411,5 +424,5 @@ export function initQuoteSheet() {
 
 export const quoteSheetTestHooks = {
   readQuote, readItems, itemSlots, sheet, itemRow, money,
-  MANUAL_PROMPT, LEGAL, PHONE,
+  MANUAL_PROMPT, LEGAL, PHONE, SHEET_TITLE,
 };
