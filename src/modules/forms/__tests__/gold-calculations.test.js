@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, afterEach } from 'vitest'
 import { goldCalculationTestHooks } from '../gold.js'
 import { formConfig } from '../config.js'
+import { submittedFields } from "./helpers/webflow-submit.js"
 
 const { normalizePricingRows, findPricingRow, calculateEstimate, calculateGoldSummary, persistSummary, persistItemSlotFields, getFieldWrappers, getItem, updateRepeaterState, getOfferRatio, calculatePurchaseValue, calculateLoanValue, getSpotOfferMultiplier, getRowOfferMultiplier, getDisplayValue, getPurityRatio, mround, roundWholePound, isManualRow, renderFormOutputs } = goldCalculationTestHooks
 
@@ -444,7 +445,7 @@ describe('gold calculator financials', () => {
 
       persistSummary(form, summary)
 
-      const submitted = Object.fromEntries(new FormData(form).entries())
+      const submitted = submittedFields(form)
 
       expect(submitted.gold_item_count).toBe(String(items.length))
       expect(submitted.gold_indicative_value).toBe(expectedIndicativeValue)
@@ -496,7 +497,7 @@ describe('gold calculator financials', () => {
     ], 'loan')
 
     persistSummary(form, summary)
-    const submitted = Object.fromEntries(new FormData(form).entries())
+    const submitted = submittedFields(form)
 
     for (const field of ['gold_purchase_total', 'gold_loan_total', 'gold_indicative_value', 'gold_total', 'gold_monthly_interest']) {
       expect(submitted[field], field).toMatch(/^\d+$/)
@@ -513,14 +514,22 @@ describe('gold calculator financials', () => {
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`
     // Three separate 9ct items whose per-item loan value ends in .5 — the case
     // where independent whole-£ rounding used to drift from the rounded sum.
-    const summary = summaryFor([
-      { itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' },
-      { itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' },
-      { itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' },
-    ], 'loan')
+    //
+    // 1.5g, not 10g. At 10g the loan value is a whole £270 and this test
+    // passes without exercising anything; it was deleted on 9 Sep 2026 and
+    // restored on 10 Sep with a fixture that still lands on .5. The
+    // precondition below is asserted so it cannot go quiet again.
+    const items = [1, 2, 3].map(() => (
+      { itemType: 'jewellery', metalType: '9', weightGrams: '1.5', quantity: '1' }
+    ))
+    const summary = summaryFor(items, 'loan')
+
+    summary.items.forEach((item) => {
+      expect(item.loanValue % 1).toBe(0.5)
+    })
 
     persistSummary(form, summary)
-    const submitted = Object.fromEntries(new FormData(form).entries())
+    const submitted = submittedFields(form)
 
     const itemAmounts = [1, 2, 3].map((i) => Number(submitted[`gold_item_${i}_amount`]))
     const sumOfItems = itemAmounts.reduce((a, b) => a + b, 0)
@@ -530,6 +539,7 @@ describe('gold calculator financials', () => {
     itemAmounts.forEach((v) => expect(String(v)).toMatch(/^\d+$/))
   })
 
+
   it('interest fields reconcile: monthly × term = total, loan + total = repayment', () => {
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`
@@ -538,7 +548,7 @@ describe('gold calculator financials', () => {
     ], 'loan')
 
     persistSummary(form, summary)
-    const s = Object.fromEntries(new FormData(form).entries())
+    const s = submittedFields(form)
     const n = (k) => Number(s[k])
 
     for (const f of ['gold_monthly_interest', 'gold_total_interest', 'gold_repayment_amount', 'gold_loan_total']) {
@@ -960,7 +970,7 @@ describe('emission — every amount whole and footing (mixed item types)', () =>
       { itemType: 'bar', bullionName: '1g_bar', quantity: '3' },
     ], 'loan')
     persistSummary(form, summary)
-    const s = Object.fromEntries(new FormData(form).entries())
+    const s = submittedFields(form)
 
     const wholeFields = [
       'gold_purchase_total', 'gold_loan_total', 'gold_indicative_value', 'gold_total',
@@ -986,7 +996,7 @@ describe('emission — every amount whole and footing (mixed item types)', () =>
       { itemType: 'bar', bullionName: '1g_bar', quantity: '1' },
     ], 'sell')
     persistItemSlotFields(form, summary)
-    const s = Object.fromEntries(new FormData(form).entries())
+    const s = submittedFields(form)
 
     for (const kind of ['type', 'amount', 'asset_type']) {
       const count = Object.keys(s).filter((k) => new RegExp(`^gold_item_\\d+_${kind}$`).test(k)).length
@@ -1041,7 +1051,7 @@ describe('consistency hardening — traceability & one-precision', () => {
       { itemType: 'bar', bullionName: 'pure_1g_bar', quantity: '1' },
     ], 'loan')
     persistSummary(form, summary)
-    const s = Object.fromEntries(new FormData(form).entries())
+    const s = submittedFields(form)
 
     expect(s.gold_spot_discount_percent).toBe('2')
     // Offer spot = raw spot × 0.98, and it is what the offers price from.
@@ -1061,7 +1071,7 @@ describe('consistency hardening — traceability & one-precision', () => {
       { itemType: 'bar', bullionName: '1g_bar', quantity: '3' },
     ], 'loan')
     persistSummary(form, summary)
-    const s = Object.fromEntries(new FormData(form).entries())
+    const s = submittedFields(form)
 
     const sum = (kind) => [1, 2, 3, 4, 5]
       .map((i) => Number(s[`gold_item_${i}_${kind}`] || 0))
@@ -1402,10 +1412,13 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
   }
 
   it('describes jewellery as "<carat>ct Gold", letting the Zap append the type', () => {
-    // The live Zap composes Item_N_Description as
-    // "{bullion_name_N} {qty} {gold_item_N_type}" — verified against stored
-    // leads ("100g Gold Bar 1 Bar", "9ct 2 Jewellery"). Emitting the full
-    // "9ct Gold Jewellery" here would read "9ct Gold Jewellery 2 Jewellery".
+    // Item_N_Description composes as "<first token> {qty} {gold_item_N_type}",
+    // so it appends the type itself: emitting "9ct Gold Jewellery" here would
+    // store "9ct Gold Jewellery 2 Jewellery".
+    //
+    // An earlier version of this comment said the first token was
+    // bullion_name_N. v24 reads gold_item_N_label ("9ct"); a draft re-points
+    // it to bullion_name_N, which is what makes "9ct Gold 1 Jewellery" land.
     expect(slotValues([{ itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' }]).description1)
       .toBe('9ct Gold')
     expect(slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }]).description1)
@@ -1503,7 +1516,7 @@ describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () =
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="${enquiryType}" checked>`
     persistSummary(form, summaryFor(items, enquiryType))
-    return Object.fromEntries(new FormData(form).entries())
+    return submittedFields(form)
   }
 
   it('reports 86 for an all-jewellery lead', () => {
@@ -1540,7 +1553,7 @@ describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () =
     form.innerHTML = `<input type="radio" name="enquiry_type" value="sell" checked>`
     persistSummary(form, summary)
 
-    expect(new FormData(form).get('gold_purchase_rate_percent')).toBe('88')
+    expect(submittedFields(form).gold_purchase_rate_percent).toBe('88')
   })
 
   it('falls back to the flat config rate when nothing was priced', () => {

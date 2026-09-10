@@ -1,14 +1,14 @@
 export { formLogger, formDom } from './core/dom.js';
-export { formValues, formUploads, formFields, formFieldGroups } from './core/fields.js';
+export { formValues } from './core/values.js';
+export { formUploads } from './core/uploads.js';
+export { formFields } from './core/fields.js';
+export { formFieldGroups } from './core/aggregate.js';
 export { formChoices } from './core/choices.js';
-export {
-  formConditions,
-  formSteps,
-  formRedirect,
-  formAttribution,
-  formSuccessPage,
-  formParams,
-} from './core/conditions.js';
+export { formConditions } from './core/conditions.js';
+export { formSteps, formParams } from './core/navigation.js';
+export { formAttribution } from './core/attribution.js';
+export { formRedirect } from './core/redirect.js';
+export { formSuccessPage } from './core/success-page.js';
 export { formSync, SYNC_FORM_MODES } from './core/sync.js';
 export { formEvents } from './core/events.js';
 export { formApp } from './core/app.js';

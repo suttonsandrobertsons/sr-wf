@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { formApp, formAttribution, formChoices, formDom, formEvents, formFields, formSteps, formSuccessPage, formUploads } from '../core.js'
 import { initLoanForms } from '../loan.js'
+import { submittedEntries } from "./helpers/webflow-submit.js"
+import { formSubmitValues } from '../submit-values/index.js'
 
 function bootForm(root) {
   const form = { root, steps: [], scope: root, syncedFieldKeys: new Set() }
@@ -10,7 +12,7 @@ function bootForm(root) {
 }
 
 function formPayload(form) {
-  return Array.from(new FormData(form.root).entries())
+  return submittedEntries(form.root)
 }
 
 describe('form UI regressions', () => {
@@ -162,9 +164,8 @@ describe('form UI regressions', () => {
     expect(input.disabled).toBe(false)
     expect(input.name).toBe('privacy_opt_in')
     expect(hidden).toBeNull()
-    expect(formPayload(form)).toEqual([
-      ['privacy_opt_in', 'privacy_opt_in'],
-    ])
+    // A checkbox never submits its value — Webflow submits the boolean.
+    expect(Object.fromEntries(formPayload(form))).toEqual({ privacy_opt_in: true })
 
     await import('../dev.js')
     form.root.dispatchEvent(new CustomEvent('suttons:form-submit', {
@@ -176,7 +177,9 @@ describe('form UI regressions', () => {
 
     input.checked = false
     formApp.refresh(form)
-    expect(formPayload(form)).toEqual([])
+    // Unchecking does not remove the key: Webflow submits every control, and an
+    // unchecked checkbox arrives as the boolean false.
+    expect(Object.fromEntries(formPayload(form))).toEqual({ privacy_opt_in: false })
   })
 
   it('preserves checkbox names and materializes same-name groups at submit', () => {
@@ -206,18 +209,16 @@ describe('form UI regressions', () => {
     expect(checkboxes.every((checkbox) => !checkbox.disabled)).toBe(true)
     expect(checkboxes.every((checkbox) => checkbox.name === 'contact_method')).toBe(true)
     expect(hidden.disabled).toBe(true)
-    expect(formPayload(form)).toEqual([
-      ['contact_method', 'Email'],
-      ['contact_method', 'Phone'],
-    ])
+    // Duplicate names collapse to the LAST control in DOM order, and the
+    // aggregate hidden is appended after the checkboxes — so it already wins
+    // here, before prepareControlsForSubmit disables anything.
+    expect(Object.fromEntries(formPayload(form))).toEqual({ contact_method: 'Email,Phone' })
 
     formFields.prepareControlsForSubmit(form)
 
     expect(hidden.disabled).toBe(false)
     expect(checkboxes.every((checkbox) => checkbox.disabled)).toBe(true)
-    expect(formPayload(form)).toEqual([
-      ['contact_method', 'Email,Phone'],
-    ])
+    expect(Object.fromEntries(formPayload(form))).toEqual({ contact_method: 'Email,Phone' })
 
     formApp.refresh(form)
     checkboxes[2].checked = false
@@ -261,22 +262,24 @@ describe('form UI regressions', () => {
 
     const form = bootForm(document.querySelector('form'))
 
-    expect(formPayload(form)).toEqual([
-      ['contact_method_email', 'Email'],
-      ['contact_method_phone', 'Phone'],
-      ['contact_method', 'Email,Phone'],
-    ])
+    expect(Object.fromEntries(formPayload(form))).toEqual({
+      // Unchecked boxes are submitted too, as the boolean false.
+      contact_method_email: true,
+      contact_method_whatsapp: false,
+      contact_method_phone: true,
+      contact_method: 'Email,Phone',
+    })
 
     const whatsapp = form.root.querySelector('[data-form-name="contact_method_whatsapp"]')
     whatsapp.checked = true
     formApp.refresh(form)
 
-    expect(formPayload(form)).toEqual([
-      ['contact_method_email', 'Email'],
-      ['contact_method_whatsapp', 'WhatsApp'],
-      ['contact_method_phone', 'Phone'],
-      ['contact_method', 'Email,WhatsApp,Phone'],
-    ])
+    expect(Object.fromEntries(formPayload(form))).toEqual({
+      contact_method_email: true,
+      contact_method_whatsapp: true,
+      contact_method_phone: true,
+      contact_method: 'Email,WhatsApp,Phone',
+    })
   })
 
   it('uses checkbox group selections for conditions before hidden submit fields sync', () => {
@@ -305,12 +308,14 @@ describe('form UI regressions', () => {
     expect(formPayload(form)).toContainEqual(['contact_method', 'Phone'])
   })
 
+  // Uses bullion_name because it is the only field still on the choose-one
+  // path. box_and_papers moved to submit-values/business-rules.js on 9 Sep 2026.
   it('keeps only active branch values in the submit payload', () => {
     document.body.innerHTML = `
       <form data-form="quote">
-        <input type="hidden" name="box_and_papers" value="Original Box Only">
-        <div data-form-show-if="original_box=no" data-form-state="condition-hidden">
-          <input type="hidden" name="box_and_papers" value="None" data-form-state="condition-hidden">
+        <input type="hidden" name="bullion_name" value="Gold Sovereign">
+        <div data-form-show-if="item_type=bar" data-form-state="condition-hidden">
+          <input type="hidden" name="bullion_name" value="None" data-form-state="condition-hidden">
         </div>
         <label>
           <input type="checkbox" name="contact_method" value="Email" checked>
@@ -330,33 +335,40 @@ describe('form UI regressions', () => {
     expect(hiddenFallback.disabled).toBe(false)
     formFields.prepareControlsForSubmit(form)
     expect(hiddenFallback.disabled).toBe(false)
-    expect(hiddenFallback.name).toBe('_disabled_box_and_papers')
-    expect(formPayload(form)).toEqual([
-      ['box_and_papers', 'Original Box Only'],
-      ['_disabled_box_and_papers', 'None'],
-      ['contact_method', 'Email,Phone'],
-    ])
+    expect(hiddenFallback.name).toBe('_disabled_bullion_name')
+    expect(Object.fromEntries(formPayload(form))).toEqual({
+      bullion_name: 'Gold Sovereign',
+      _disabled_bullion_name: 'None',
+      contact_method: 'Email,Phone',
+    })
   })
 
-  it('submits only the active box_and_papers value (dedups the hidden-field group)', () => {
-    // Regression: box_and_papers is built as four same-named hidden inputs gated
-    // by data-form-show-if on the two Yes/No radios. Without single-submit dedup
-    // all four serialised under one name and Zapier/Zoho resolved to "None".
+  // Was a choose-one test over four same-named hidden inputs. box_and_papers is
+  // now a business rule, so this asserts the rule wins even while the old
+  // Designer inputs are still on the page — the state during migration.
+  //
+  // Radios because that is what the live forms use. (formValues.get reads
+  // type="hidden" too — an earlier version of this comment claimed otherwise.)
+  it('computes box_and_papers and overrides the legacy Designer inputs', () => {
     document.body.innerHTML = `
       <form data-form="quote">
-        <input type="hidden" name="original_box" value="yes">
-        <input type="hidden" name="original_paperwork" value="yes">
+        <input type="radio" name="original_box" value="yes" checked>
+        <input type="radio" name="original_paperwork" value="yes" checked>
         <input type="hidden" name="box_and_papers" value="Original Box and Papers" data-form-field="box_and_papers" data-form-show-if="original_box=yes; original_paperwork=yes">
-        <input type="hidden" name="box_and_papers" value="Original Box Only" data-form-field="box_and_papers" data-form-show-if="original_box=yes; original_paperwork=no">
-        <input type="hidden" name="box_and_papers" value="Original Papers Only" data-form-field="box_and_papers" data-form-show-if="original_box=no; original_paperwork=yes">
         <input type="hidden" name="box_and_papers" value="None" data-form-field="box_and_papers" data-form-show-if="original_box=no; original_paperwork=no">
       </form>
     `
 
     const form = bootForm(document.querySelector('form'))
-    const active = formPayload(form).filter(([name]) => name === 'box_and_papers')
+    // Business rules run at SUBMIT, not on render — events.js calls
+    // formSubmitValues.apply() there. The old choose-one dedup ran on both,
+    // which is why this test used to need no explicit call.
+    formSubmitValues.apply(form.root)
+    const payload = Object.fromEntries(formPayload(form))
 
-    expect(active).toEqual([['box_and_papers', 'Original Box and Papers']])
+    expect(payload.box_and_papers).toBe('Original Box and Papers')
+    // The leftovers are renamed out of the way, exactly as before.
+    expect(payload._disabled_box_and_papers).toBeDefined()
   })
 
   it('supports form-level configured single-submit field names', () => {
@@ -460,9 +472,13 @@ describe('form UI regressions', () => {
     const form = bootForm(document.querySelector('form'))
     formFields.prepareControlsForSubmit(form)
 
-    expect(formPayload(form)).toEqual([
-      ['watch_brand', 'Rolex'],
-    ])
+    expect(Object.fromEntries(formPayload(form))).toEqual({
+      watch_brand: 'Rolex',
+      // The inactive branches are condition-hidden and disabled, which does not
+      // stop Webflow submitting them — they arrive empty rather than absent.
+      jewellery_brand: '',
+      handbag_brand: '',
+    })
   })
 
   it('materializes a brand group list alongside individual brand selects', () => {
@@ -494,10 +510,12 @@ describe('form UI regressions', () => {
     const form = bootForm(document.querySelector('form'))
     formFields.prepareControlsForSubmit(form)
 
-    expect(formPayload(form)).toEqual([
-      ['watch_brand', 'Rolex'],
-      ['brands', 'Rolex'],
-    ])
+    expect(Object.fromEntries(formPayload(form))).toEqual({
+      watch_brand: 'Rolex',
+      jewellery_brand: '',
+      handbag_brand: '',
+      brands: 'Rolex',
+    })
   })
 
   it('formats multi-value field groups as comma-separated text for Zapier', () => {
@@ -551,7 +569,13 @@ describe('form UI regressions', () => {
     ])
   })
 
-  it('does not submit condition-hidden fields regardless of input type', () => {
+  // RENAMED 9 Sep 2026. This used to claim condition-hidden fields "are not
+  // submitted", asserted with new FormData(form) — which omits disabled controls
+  // and so agreed. Webflow's own serialiser has no :not(:disabled) and submits
+  // them anyway, so the claim was false in production. What the bundle actually
+  // does is DISABLE them, which stops native constraint validation focusing an
+  // invisible field but does not remove the key. Only renaming removes a key.
+  it('disables condition-hidden fields, which does NOT keep them out of the payload', () => {
     document.body.innerHTML = `
       <form data-form="quote">
         <input type="hidden" name="active_hidden" value="keep">
@@ -572,12 +596,19 @@ describe('form UI regressions', () => {
     formFields.prepareControlsForSubmit(form)
     expect(deadHidden.disabled).toBe(true)
     expect(deadText.disabled).toBe(true)
+
+    // The consequence, asserted so it cannot be forgotten again: both dead
+    // fields still reach Zapier, carrying answers from a branch the customer
+    // abandoned. Nothing clears a hidden branch's values — formFields.clear()
+    // resets the whole form, not one branch.
     expect(formPayload(form)).toEqual([
       ['active_hidden', 'keep'],
+      ['dead_hidden', 'drop-hidden'],
+      ['dead_text', 'drop-text'],
     ])
   })
 
-  it('still disables condition-hidden fields when inline display hiding is off', () => {
+  it('still disables condition-hidden fields when inline display hiding is off (still submitted)', () => {
     document.body.innerHTML = `
       <form data-form="quote" data-form-condition-mode="inline-hide-off">
         <input type="hidden" name="active_hidden" value="keep">
@@ -596,6 +627,7 @@ describe('form UI regressions', () => {
     expect(deadText.style.display).not.toBe('none')
     expect(formPayload(form)).toEqual([
       ['active_hidden', 'keep'],
+      ['dead_text', 'drop-text'],
     ])
   })
 

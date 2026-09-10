@@ -1,6 +1,7 @@
 import { formDom, formLogger } from './dom.js';
-import { formFields, formValues } from './fields.js';
-import { formParams } from './conditions.js';
+import { formFields } from './fields.js';
+import { formValues } from './values.js';
+import { formParams } from './navigation.js';
 import { escapeSelector } from './shared.js';
 import { getFormApp } from './lazy-app.js';
 

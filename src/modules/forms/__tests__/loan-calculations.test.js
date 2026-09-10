@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { calculateLoanSummary, formatLoanHelpMessage, formatLoanSavingsMessage, loanCalculationTestHooks } from '../loan.js'
+import { submittedFields } from "./helpers/webflow-submit.js"
 
 describe('loan calculator financials', () => {
   it('calculates the default 5000 pound, 3 month example at the 6 percent band', () => {
@@ -94,7 +95,7 @@ describe('loan calculator financials', () => {
 
     loanCalculationTestHooks.doRefresh(form)
 
-    const submitted = Object.fromEntries(new FormData(form).entries())
+    const submitted = submittedFields(form)
     expect(submitted.requested_amount).toBe('5000')
     expect(submitted.loan_amount).toBeUndefined()
     expect(submitted.loan_duration_months).toBe('3')
@@ -139,6 +140,6 @@ describe('loan calculator financials', () => {
     loanCalculationTestHooks.doRefresh(form)
 
     expect(form.querySelector('[data-form-loan-output="interest_rate"]').textContent).toBe('')
-    expect(Object.fromEntries(new FormData(form).entries()).loan_interest_rate).toBe('')
+    expect(submittedFields(form).loan_interest_rate).toBe('')
   })
 })

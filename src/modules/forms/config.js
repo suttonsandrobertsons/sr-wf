@@ -113,7 +113,6 @@ export const formConfig = {
     // the form_category field this produces, instead of hardcoding form
     // keys in GTM.
     leadFormKeys: new Set(['get-a-quote', 'gold', 'appointment', 'courier']),
-    hiddenFields: [...TRACKING_FIELDS],
   },
 
   uploads: {
@@ -158,22 +157,22 @@ export const formConfig = {
   submit: {
     // Same-named hidden inputs, each gated by show-if, where exactly one
     // should submit; without dedup, Zapier/Zoho would pick the wrong one.
-    // See core/fields.js prepareSingleSubmitControls.
-    // New_Lead_Type is derived (derived-fields.js) and has no such inputs left
-    // in the Designer. Its entry guards any unswept page still carrying the old
-    // markup — do not remove it as dead.
+    // See core/fields.js prepareChooseOneControls.
     // Names authored as SEVERAL controls in the Designer that must collapse to
-    // one submitted value. The losers are RENAMED to disabledNamePrefix, which
+    // one submitted value. The losers are RENAMED to unsubmittedNamePrefix, which
     // is the only thing that removes a key from Webflow's payload — disabling a
     // control does not (see core/app.js).
     //
-    // `New_Lead_Type` was removed on 9 Sep 2026: it is computed in
-    // derived-fields.js and is authored in no page's markup (checked against all
-    // 310 sitemap paths), so it had nothing to dedup. It cannot go back to
-    // markup either — the dedup submits exactly one control and that value
-    // accumulates.
-    singleValueFieldNames: ['box_and_papers', 'appointment_length', 'meeting_venue', 'bullion_name'],
-    disabledNamePrefix: '_disabled_',
+    // `New_Lead_Type` was removed on 9 Sep 2026, and box_and_papers,
+    // meeting_venue and appointment_length with it. All four are decided in
+    // submit-values/ now. New_Lead_Type in particular is authored in no page's
+    // markup — a live grep of all six lead pages finds no control of that name
+    // — so it had nothing to dedup, and while it stayed in this list a render
+    // pass between two applies could rename the rule's OWN hidden. It cannot
+    // go back to markup either: the dedup submits exactly one control and this
+    // value accumulates.
+    chooseOneFieldNames: ['bullion_name'],
+    unsubmittedNamePrefix: '_disabled_',
   },
 
   gold: {

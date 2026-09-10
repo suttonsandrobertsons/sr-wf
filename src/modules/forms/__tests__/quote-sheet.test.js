@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { printQuoteSheet, quoteSheetTestHooks } from "../quote-sheet.js";
-import { formatMoney } from "../shared.js";
+import { formatMoney } from "../numbers.js";
 import { MANUAL_QUOTE_PROMPT } from "../gold.js";
 
 const { readQuote, sheet, MANUAL_PROMPT, LEGAL, PHONE } = quoteSheetTestHooks;

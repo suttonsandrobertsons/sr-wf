@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { formApp, formChoices, formDom, formFields } from '../core.js'
+import { submittedEntries } from "./helpers/webflow-submit.js"
 
 function bootForm(root) {
   const form = { root, steps: [], scope: root, syncedFieldKeys: new Set() }
@@ -9,7 +10,7 @@ function bootForm(root) {
 }
 
 function formPayload(form) {
-  return Array.from(new FormData(form.root).entries())
+  return submittedEntries(form.root)
 }
 
 describe('field defect fixes', () => {
@@ -77,8 +78,17 @@ describe('field defect fixes', () => {
     const form = bootForm(document.querySelector('form'))
     formFields.prepareControlsForSubmit(form)
 
-    const names = formPayload(form).map(([name]) => name)
-    expect(names).not.toContain('interests')
+    // The fix under test is that the aggregate stays DISABLED — that is what
+    // stops it being treated as an answered field. It does not stop it being
+    // submitted: Webflow serialises disabled controls, so `interests` still
+    // reaches Zapier, as an empty string rather than absent.
+    const hidden = form.root.querySelector('input[type="hidden"][data-form-name="interests"]')
+    expect(hidden.disabled).toBe(true)
+    expect(Object.fromEntries(formPayload(form)).interests).toBe('')
+
+    // The two checkboxes carry data-form-name but no name, so Webflow falls back
+    // to positional `Field N` keys for them. Worth seeing in a payload assertion.
+    expect(formPayload(form).map(([name]) => name)).toEqual(['Field 1', 'Field 2', 'interests'])
   })
 
   it('submits the aggregate hidden field once a checkbox is selected', () => {

@@ -54,7 +54,7 @@
 // 7.99g to 8g.
 
 import { MANUAL_QUOTE_PROMPT } from "./gold.js";
-import { formatMoney } from "./shared.js";
+import { formatMoney } from "./numbers.js";
 
 const TRIGGER = "[data-form-gold-print]";
 

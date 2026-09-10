@@ -80,7 +80,7 @@ test.describe("courier — transact question removed, pack size retained", () =>
       const option = await fieldState(page, "courier", "courier_option");
 
       // Exactly one control, carrying Zoho's own Fullfillment value. More than
-      // one would be a real bug: courier_option is not in singleValueFieldNames,
+      // one would be a real bug: courier_option is not in chooseOneFieldNames,
       // so there is no dedup safety net to pick a winner.
       expect(option.present).toBe(true);
       expect(option.count).toBe(1);
@@ -152,39 +152,38 @@ test.describe("gold calculator — enquiry still drives the quote basis", () => 
   });
 });
 
-test.describe("box_and_papers — the other combination field still dedups", () => {
-  // box_and_papers is four same-named hidden inputs, one per Yes/No combination,
-  // collapsed to a single submitter by singleValueFieldNames. This is the pattern
-  // New_Lead_Type used to use, so it's worth keeping honest cover on it.
+test.describe("box_and_papers — the migration guard", () => {
+  // box_and_papers moved from four same-named Designer inputs to a business
+  // rule in submit-values/business-rules.js on 9 Sep 2026. The inputs are still
+  // on the page and must stay there until the new bundle SHA is live.
   //
-  // Note the dedup renames at RENDER time, not just at submit: until the two
-  // questions are answered all four are condition-hidden, so none is "active"
-  // and every one carries the _disabled_ prefix. Identify them by the
-  // data-form-submit-original-name the engine stamps on, not by their live name.
-  test("all four combinations are registered and only one can ever win", async ({ page }) => {
+  // This deliberately asserts PRESENCE only, never the submitted value. The
+  // two bundles differ at render time and this spec runs against whichever is
+  // published:
+  //
+  //   deployed 9f8a106  box_and_papers is in chooseOneFieldNames, so the dedup
+  //                     renames at RENDER — before the questions are answered
+  //                     all four read _disabled_box_and_papers.
+  //   new bundle        renaming happens in formSubmitValues.apply() at SUBMIT,
+  //                     so at render all four still carry the plain name.
+  //
+  // A render-time name or payload assertion therefore passes against one and
+  // fails against the other. Asserting the real payload would mean submitting
+  // the form, which these specs must not do. The payload IS covered, against
+  // the faithful serialiser, by __tests__/submit-values-ownership.test.js —
+  // including this exact yes/yes case.
+  //
+  // What this guards is the deployment order in
+  // private/docs/developer/designer-cleanup.md: delete the inputs before the
+  // bundle is live and the deployed choose-one dedup has nothing to pick, so
+  // appointment_end_datetime empties and box_and_papers stops submitting.
+  //
+  // Delete this spec when the inputs are deleted.
+
+  test("the four Designer inputs are still present", async ({ page }) => {
     await page.goto("/get-a-quote");
 
-    const group = await page.evaluate(() => {
-      const form = document.querySelector('[data-form="get-a-quote"]');
-      const members = [...form.querySelectorAll('[data-form-submit-original-name="box_and_papers"]')];
-      return {
-        registered: members.length,
-        liveNames: members.filter((m) => m.getAttribute("name") === "box_and_papers").length,
-        values: members.map((m) => m.value),
-      };
-    });
-
-    expect(group.registered, "four combinations should be registered with the dedup").toBe(4);
-    expect(group.values).toEqual([
-      "Original Box and Papers", "Original Box Only", "Original Papers Only", "None",
-    ]);
-    expect(group.liveNames, "no combination may submit before the questions are answered").toBe(0);
-  });
-
-  test("answering both Yes leaves exactly one submitting value", async ({ page }) => {
-    await page.goto("/get-a-quote");
-
-    const result = await page.evaluate(async () => {
+    const found = await page.evaluate(async () => {
       const form = document.querySelector('[data-form="get-a-quote"]');
       const pick = (n, v) => {
         const r = [...form.querySelectorAll(`[name="${n}"]`)].find((x) => x.value === v);
@@ -193,17 +192,20 @@ test.describe("box_and_papers — the other combination field still dedups", () 
         ["input", "change", "click"].forEach((t) => r.dispatchEvent(new Event(t, { bubbles: true })));
         return true;
       };
-      // The two questions only appear for these asset types.
+      // The two questions appear for these asset types only.
       pick("asset_type", "Watches");
       await new Promise((r) => setTimeout(r, 700));
-      const set = pick("original_box", "yes") && pick("original_paperwork", "yes");
+      const answered = pick("original_box", "yes") && pick("original_paperwork", "yes");
       await new Promise((r) => setTimeout(r, 800));
-      const live = [...form.querySelectorAll('[name="box_and_papers"]')];
-      return { set, liveCount: live.length, liveValue: live[0]?.value ?? null };
+
+      const values = ["Original Box and Papers", "Original Box Only", "Original Papers Only", "None"];
+      return {
+        answered,
+        authored: values.filter((v) => form.querySelector(`[value="${v}"]`)).length,
+      };
     });
 
-    expect(result.set, "the box/papers questions should be reachable").toBe(true);
-    expect(result.liveCount, "exactly one combination may submit").toBe(1);
-    expect(result.liveValue).toBe("Original Box and Papers");
+    expect(found.answered, "the box/papers questions should be reachable").toBe(true);
+    expect(found.authored, "all four Designer inputs must remain until the SHA is bumped").toBe(4);
   });
 });

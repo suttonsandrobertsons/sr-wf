@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { installSubmitCapture, fillAndSubmit, LEAD_FORMS } from "./helpers/forms.js";
 
 // New_Lead_Type is derived at submit time from enquiry_type plus the two
-// sell-only follow-ups (derived-fields.js).
+// sell-only follow-ups (submit-values/business-rules.js).
 //
 // The combination matrix is driven through `courier` because it is the shortest
 // flow (2 steps, no uploads). get-a-quote deliberately runs only one case — its

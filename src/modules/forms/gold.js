@@ -1,7 +1,9 @@
 import { formConfig } from "./config.js";
 import { formDom, formValues, formLogger, formApp } from "./core.js";
 import { initSelects } from "./selects.js";
-import { parseNumber, roundMoney, formatMoney, formatNumber, getRateBand, debounce } from "./shared.js";
+import {parseNumber, roundMoney, formatMoney, formatNumber, getRateBand} from "./numbers.js";
+import { debounce } from "../../utils/debounce.js";
+import { escapeSelector } from "../../utils/dom.js";
 
 const SELECTORS = {
   form: "form[data-form-gold]",
@@ -36,9 +38,6 @@ const MAX_ITEMS = 5;
 const initializedForms = new WeakSet();
 const instances = new WeakMap();
 
-function escapeSelector(value) {
-  return formDom.escape(value);
-}
 
 function normalizeSlug(value) {
   return String(value || "")
@@ -66,8 +65,8 @@ function getItemFieldValue(itemElement, name) {
   // Prefer the control whose name carries this item's indexed prefix, else
   // fall back to any readable control in the field's wrappers.
   //
-  // The fallback works around prepareSingleSubmitControls (core/fields.js),
-  // which collapses controls sharing a singleValueFieldNames base name (e.g.
+  // The fallback works around prepareChooseOneControls (core/fields.js),
+  // which collapses controls sharing a chooseOneFieldNames base name (e.g.
   // bullion_name) and renames all but one to `_disabled_bullion_name`. On a
   // multi-item form this breaks item 2+'s indexed name match, producing a
   // false "Choose the coin or bar." error and empty gold_item_N_* fields.
@@ -104,7 +103,10 @@ function getFieldWrappers(root, name) {
     .filter((field, index, fields) => field && root.contains(field) && fields.indexOf(field) === index);
 }
 
-function setState(element, state, enabled) {
+// Stamps ONLY this element. formDom.setState also stamps every descendant,
+// because CSS selectors target data-form-state on child nodes. Gold rows do not
+// want that, so the two are deliberately different and are named differently.
+function setOwnState(element, state, enabled) {
   const states = new Set((element.getAttribute("data-form-state") || "").split(/\s+/).filter(Boolean));
   if (enabled) states.add(state);
   else states.delete(state);
@@ -122,8 +124,8 @@ function setGoldItemStatus(element, state) {
 }
 
 function clearAndSet(element, targetState, states) {
-  states.forEach((s) => setState(element, s, false));
-  setState(element, targetState, true);
+  states.forEach((s) => setOwnState(element, s, false));
+  setOwnState(element, targetState, true);
 }
 
 function getTextValue(element) {
@@ -544,7 +546,7 @@ function validateForm(instance, options = {}) {
   let message = "";
 
   if (!items.length) {
-    setState(form, "invalid", false);
+    setOwnState(form, "invalid", false);
     setOutput(form, "validation_error", "");
     return { ok: true, inactive: true, itemResults: [] };
   }
@@ -558,7 +560,7 @@ function validateForm(instance, options = {}) {
     message = instance.priceError ? "Gold price is unavailable. Please try again." : "Gold price is still loading. Please try again in a moment.";
   }
 
-  setState(form, "invalid", showErrors && Boolean(message));
+  setOwnState(form, "invalid", showErrors && Boolean(message));
   setOutput(form, "validation_error", showErrors ? message : "");
 
   if (message && options.shouldFocus) focusFirstInvalid(items, itemResults);
@@ -571,7 +573,7 @@ function hasPricedItems(validation) {
 }
 
 function setItemError(itemElement, message, showErrors) {
-  setState(itemElement, "invalid", showErrors && Boolean(message));
+  setOwnState(itemElement, "invalid", showErrors && Boolean(message));
   if (showErrors && message) itemElement.setAttribute("aria-invalid", "true");
   else itemElement.removeAttribute("aria-invalid");
 
@@ -1013,13 +1015,21 @@ function toItemTypeSubmitLabel(itemType) {
 // untouched ("Gold Sovereign", "100g Gold Bar") — his note against both was
 // "no change".
 //
-// NOT "18ct Gold Jewellery", even though that is the string in his doc. The
-// live Zap already composes Zoho's Item_N_Description as
-// "{bullion_name_N} {qty} {gold_item_N_type}" — verified against stored leads
-// ("100g Gold Bar 1 Bar", "9ct 2 Jewellery") — so it appends the item type
-// itself. Emitting the full phrase here would read "18ct Gold Jewellery 2
-// Jewellery". With "18ct Gold" the existing Zap yields "18ct Gold 2
-// Jewellery" and needs no edit at all.
+// NOT "18ct Gold Jewellery", even though that is the string in his doc,
+// because Item_N_Description already appends the item type: it composes as
+// "<first token> {qty} {gold_item_N_type}", so the full phrase would read
+// "18ct Gold Jewellery 2 Jewellery".
+//
+// CORRECTION, 10 Sep 2026. This comment claimed the first token was
+// bullion_name_N. It is not — v24 reads gold_item_N_label, which for
+// jewellery is the bare "18ct". The evidence originally cited here,
+// "9ct 2 Jewellery", is itself the proof: bullion_name_N would have given
+// "9ct Gold 2 Jewellery". For a coin the two fields hold the same string, so
+// the stored leads that were checked could not tell them apart.
+//
+// A draft re-points Item_N_Description to bullion_name_N on all five slots,
+// which is what makes "18ct Gold 1 Jewellery" reach Zoho. Until it is
+// published a jewellery row still reads "18ct 1 Jewellery".
 //
 // Falls back to the plain label whenever the carat cannot be read, so the
 // worst case is today's behaviour rather than an empty field.
@@ -1078,7 +1088,10 @@ function persistItemSlotFields(form, summary) {
       `gold_item_${index}_bullion_type`,
       item && !item.manual && normalizeSlug(item.itemType) !== "jewellery" ? item.label : "",
     );
-    // weight_grams_${index} duplicates the field above; the Zap maps both names.
+    // Duplicates gold_item_${index}_weight_grams above. No captured Zap maps
+    // this name — all five Item_N_Weight params read the other one — so it is
+    // a candidate for deletion, but not until the client's unpublished Zap
+    // draft is live and the fixtures are re-captured.
     w(`weight_grams_${index}`, item?.weightGrams);
     w(`gold_item_${index}_label`, item?.label);
     // Whole £; Σ gold_item_N_purchase_value = gold_purchase_total (etc).
@@ -1286,11 +1299,11 @@ function resetItem(itemElement, options = {}) {
   });
 
   itemElement.querySelectorAll("[data-form-state]").forEach((element) => {
-    setState(element, "invalid", false);
-    setState(element, "filled", false);
-    setState(element, "selected", false);
-    setState(element, "condition-hidden", false);
-    setState(element, "hidden", false);
+    setOwnState(element, "invalid", false);
+    setOwnState(element, "filled", false);
+    setOwnState(element, "selected", false);
+    setOwnState(element, "condition-hidden", false);
+    setOwnState(element, "hidden", false);
     element.hidden = false;
     element.removeAttribute("aria-hidden");
     element.removeAttribute("inert");
@@ -1338,8 +1351,8 @@ function updateRepeaterState(instance) {
     const itemIndex = index + 1;
     item.setAttribute("data-form-gold-item-index", String(itemIndex));
     syncRepeaterFieldNames(item, itemIndex);
-    setState(item, "first", index === 0);
-    setState(item, "last", index === items.length - 1);
+    setOwnState(item, "first", index === 0);
+    setOwnState(item, "last", index === items.length - 1);
     updateItemTitle(item, itemIndex);
   });
 

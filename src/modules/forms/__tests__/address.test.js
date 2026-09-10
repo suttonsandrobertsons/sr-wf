@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { submittedFields } from "./helpers/webflow-submit.js"
 
 describe("address module (demo mode)", () => {
   let formEl;
@@ -197,7 +198,7 @@ describe("address module (demo mode)", () => {
 
     const { formFields } = await import("../core.js");
     formFields.render({ root: formEl, steps: [] });
-    const submitted = Object.fromEntries(new FormData(formEl).entries());
+    const submitted = submittedFields(formEl);
 
     expect(submitted.address_line_1).toBe("12 High Street");
     expect(submitted.address_line_2).toBe("");

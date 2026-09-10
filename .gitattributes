@@ -1,1 +1,12 @@
-dist/loader.js merge=auto-rebuild
+# dist/loader.js is a minified single-line build artifact. Git's text merge
+# produces a file that matches neither side, and that file is what jsDelivr
+# serves to ~164 live pages.
+#
+# `-merge` makes git refuse to merge it and leave a conflict instead. Resolve
+# by taking either side; .githooks/pre-commit rebuilds it from src on the
+# resolving commit, so the content is correct either way.
+#
+# This replaced `merge=auto-rebuild` on 10 Sep 2026. That named a merge driver
+# nothing defined — drivers live in .git/config, which is not version
+# controlled — so the attribute was a no-op and git text-merged the bundle.
+dist/loader.js -merge

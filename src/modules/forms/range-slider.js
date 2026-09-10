@@ -1,5 +1,5 @@
 import { formConfig } from "./config.js";
-import { parseNumber } from "./shared.js";
+import { parseNumber } from "./numbers.js";
 
 const SELECTORS = {
   slider: "[data-form-loan-slider]",

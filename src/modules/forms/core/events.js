@@ -1,11 +1,14 @@
 import { SELECTORS } from './shared.js';
 import { formLogger, formDom } from './dom.js';
-import { formUploads, formFields } from './fields.js';
+import { formFields } from './fields.js';
+import { formUploads } from './uploads.js';
 import { formChoices } from './choices.js';
-import { formSteps, formRedirect, formAttribution, formParams } from './conditions.js';
+import { formSteps, formParams } from './navigation.js';
+import { formRedirect } from './redirect.js';
+import { formAttribution } from './attribution.js';
 import { formSync } from './sync.js';
 import { getFormApp } from './lazy-app.js';
-import { formDerivedFields } from '../derived-fields.js';
+import { formSubmitValues } from '../submit-values/index.js';
 
 let hasSyncSubmitGuard = false;
 
@@ -264,7 +267,7 @@ export const formEvents = {
 
     formFields.normalizeBeforeSubmit(form);
     getFormApp().refresh(form);
-    formDerivedFields.apply(form.root);
+    formSubmitValues.apply(form.root);
     const redirectValues = formRedirect.getRedirectValues(form);
     formAttribution.capture();
     const attributionMeta = formAttribution.setFields(form);
@@ -319,7 +322,7 @@ export const formEvents = {
       }
 
       formFields.prepareControlsForSubmit(form);
-      formDerivedFields.apply(form.root);
+      formSubmitValues.apply(form.root);
       formAttribution.capture();
       const attributionMeta = formAttribution.setFields(form);
       formAttribution.storeSuccessSnapshot(form, attributionMeta);

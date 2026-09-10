@@ -2,7 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { formSync, SYNC_FORM_MODES } from '../core/sync.js'
 import { formApp } from '../core/app.js'
 import { formEvents, initSyncSubmitGuard } from '../core/events.js'
-import { formAttribution, formRedirect } from '../core/conditions.js'
+import { formAttribution } from '../core/attribution.js'
+import { formRedirect } from '../core/redirect.js'
 import { initForms } from '../index.js'
 
 function makeSyncForm({ mode = 'sync', target = 'footer-form', fields = '' } = {}) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMoney, formatNumber, getRateBand } from '../shared.js'
+import { formatMoney, formatNumber, getRateBand } from '../numbers.js'
 import { formConfig } from '../config.js'
 
 describe('calculator display formatting', () => {

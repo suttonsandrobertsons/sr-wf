@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import { formApp } from '../core/app.js'
-import { formSteps } from '../core/conditions.js'
+import { formSteps } from '../core/navigation.js'
 
 // Regression: a lead could bypass step-1 required validation by deep-linking to
 // a later step (e.g. /get-a-quote?step=2). Redirect-mode forms legitimately

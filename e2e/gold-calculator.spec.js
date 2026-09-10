@@ -56,11 +56,39 @@ async function fillJewelleryItem(page, enquiry, opts) {
   await fillJewellery(page, opts);
 }
 
+// What the page would actually submit, by Webflow's rules rather than
+// FormData's. FormData omits disabled controls; Webflow does not, and on this
+// form the difference is every condition-hidden per-slot field. Mirrors
+// src/modules/forms/__tests__/helpers/webflow-submit.js; the authority is the
+// port in the private repo at tools/twins/webflow/serialise.js.
 function readEmit(page) {
   return page.evaluate(() => {
-    const gf = document.querySelector('[data-form="gold"]');
-    const fd = Object.fromEntries(new FormData(gf).entries());
-    return fd;
+    const root = document.querySelector('[data-form="gold"]');
+    const skipped = new Set(['submit', 'file', 'button']);
+    const fields = {};
+    let index = 0;
+
+    root.querySelectorAll('input, select, textarea, button').forEach((control) => {
+      const type = String(control.getAttribute('type') || '').toLowerCase();
+      if (skipped.has(type)) return;
+
+      index += 1;
+      const key = control.getAttribute('data-name') || control.getAttribute('name') || `Field ${index}`;
+      let value = control.value;
+
+      if (type === 'checkbox') {
+        value = control.checked;
+      } else if (type === 'radio') {
+        if (fields[key] === null || typeof fields[key] === 'string') return;
+        const checked = root.querySelector(`input[name="${control.getAttribute('name')}"]:checked`);
+        value = checked ? checked.value : null;
+      }
+
+      if (typeof value === 'string') value = value.trim();
+      fields[key] = value;
+    });
+
+    return fields;
   });
 }
 
@@ -153,10 +181,15 @@ test.describe("gold calculator (live)", () => {
     const spot = Number(e.gold_item_1_spot_value);
     const purchaseRatio = Number(e.gold_item_1_purchase_value) / spot;
     const loanRatio = Number(e.gold_item_1_loan_value) / spot;
-    expect(purchaseRatio).toBeGreaterThan(0.85); // ~0.86 (0.98 × 0.88)
-    expect(purchaseRatio).toBeLessThan(0.875); // rejects 0.88 (no discount)
-    expect(loanRatio).toBeGreaterThan(0.72); // ~0.74 (0.98 × 0.75)
-    expect(loanRatio).toBeLessThan(0.745); // rejects 0.75 (no discount)
+    // Jewellery: 0.97 spot discount x 0.86 purchase rate = 0.8342.
+    // Was 0.98 x 0.88 = 0.8624 until 869eu8kr1 moved the discount to 3% and the
+    // jewellery purchase rate to 86%. This band was not updated with the rates,
+    // so the spec failed against the deployed bundle until 9 Sep 2026.
+    expect(purchaseRatio).toBeGreaterThan(0.825);
+    expect(purchaseRatio).toBeLessThan(0.845); // rejects 0.86 (no discount)
+    // Loan keeps the flat 75%: 0.97 x 0.75 = 0.7275.
+    expect(loanRatio).toBeGreaterThan(0.72);
+    expect(loanRatio).toBeLessThan(0.735); // rejects 0.75 (no discount)
   });
 
   // Empty item slots emit blank amount/asset type — no phantom Zoho line items.

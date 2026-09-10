@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { formApp, formAttribution, formChoices, formDom, formFields, formEvents } from '../core.js'
-import { formDerivedFields } from '../derived-fields.js'
 
 function bootForm(root) {
   const form = { root, steps: [], scope: root, syncedFieldKeys: new Set() }

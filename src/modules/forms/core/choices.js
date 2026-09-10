@@ -1,4 +1,5 @@
-import { SELECTORS, formConfig, escapeSelector, formatGroupValue } from './shared.js';
+import { SELECTORS, formConfig, escapeSelector } from './shared.js';
+import { ensureAggregateHidden, writeAggregateValue } from './aggregate.js';
 import { formDom } from './dom.js';
 
 function shouldReadCheckbox(checkbox) {
@@ -90,20 +91,7 @@ export const formChoices = {
   },
 
   ensureCheckboxHidden(root, fieldName, asList = false) {
-    let hidden = root.querySelector(`input[type='hidden'][data-form-name='${formDom.escape(fieldName)}']`);
-    if (!hidden) {
-      hidden = root.querySelector(`input[type='hidden'][name='${formDom.escape(fieldName)}']`);
-    }
-    if (!hidden) {
-      hidden = document.createElement('input');
-      hidden.type = 'hidden';
-      hidden.name = fieldName;
-      root.appendChild(hidden);
-    }
-
-    hidden.setAttribute('data-form-name', fieldName);
-    if (asList) hidden.setAttribute('data-form-checkbox-list', 'true');
-    return hidden;
+    return ensureAggregateHidden(root, fieldName, asList ? 'data-form-checkbox-list' : null);
   },
 
   handleKeydown(event, input) {
@@ -174,15 +162,11 @@ export const formChoices = {
         return shouldReadCheckbox(checkbox);
       });
 
-      if (!checked.length) {
-        hidden.value = '';
-        hidden.disabled = true;
-        return;
+      // Only the non-empty case differs from the shared helper: this path keeps
+      // the aggregate disabled unless its name collides with the natives.
+      if (writeAggregateValue(hidden, checked.map((checkbox) => checkbox.value || 'on'))) {
+        hidden.disabled = collidesWithNativeName;
       }
-
-      const values = checked.map((checkbox) => checkbox.value || 'on');
-      hidden.value = formatGroupValue(values);
-      hidden.disabled = collidesWithNativeName;
     });
   },
 
@@ -210,19 +194,18 @@ export const formChoices = {
         return shouldReadCheckbox(checkbox);
       });
 
-      if (!checked.length) {
-        hidden.value = '';
-        hidden.disabled = true;
-      } else {
-        hidden.value = formatGroupValue(checked.map((checkbox) => checkbox.value || 'on'));
-        hidden.disabled = false;
-      }
+      writeAggregateValue(hidden, checked.map((checkbox) => checkbox.value || 'on'));
 
-      // Disables the native checkboxes so only the aggregated hidden field
-      // submits under the colliding name. Not re-enabled here: the next render
-      // pass (formFields.render -> shouldDisableControlDuringRender) clears
-      // disabled on all non-file controls, so a failed/non-navigating submit
-      // recovers on the next refresh.
+      // Disabling does not remove these from the payload: Webflow submits
+      // disabled controls. The aggregate wins because ensureAggregateHidden
+      // appends it AFTER the checkboxes, and duplicate names collapse to the
+      // last in document order. Move the insert earlier and the group submits
+      // the boolean `true` instead of "Email,Phone".
+      //
+      // Keep the disabling for its real effect: native validation skips a
+      // disabled control, so a conditional `required` cannot block submit on an
+      // invisible field. Renaming, as prepareChooseOneControls does, is the only
+      // way to remove a key.
       group.checkboxes.forEach((checkbox) => {
         checkbox.disabled = true;
       });

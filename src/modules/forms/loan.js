@@ -1,6 +1,7 @@
 import { formConfig } from "./config.js";
-import { formLogger, formApp } from "./core.js";
-import { roundMoney, formatMoney, parseNumber, getRateBand, debounce } from "./shared.js";
+import { formLogger, formApp, formValues } from "./core.js";
+import {roundMoney, formatMoney, parseNumber, getRateBand} from "./numbers.js";
+import { debounce } from "../../utils/debounce.js";
 import { initRangeSliders } from "./range-slider.js";
 
 const SELECTORS = {
@@ -34,17 +35,9 @@ function doRefresh(form) {
   const amount = getAmount(form);
   const months = getDuration(form);
 
-  const setField = (name, value) => {
-    let field = form.querySelector(`[name="${name}"]`);
-    if (!field) {
-      field = document.createElement("input");
-      field.type = "hidden";
-      field.name = name;
-      form.appendChild(field);
-    }
-    field.value = String(value);
-    field.disabled = false;
-  };
+  // formValues.setHidden is the one find-or-create-hidden helper. loan.js had
+  // its own copy of it until 9 Sep 2026.
+  const setField = (name, value) => formValues.setHidden(form, name, String(value));
 
   if (!Number.isFinite(amount) || amount <= 0) {
     form.removeAttribute("data-form-loan-enquiry");

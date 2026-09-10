@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { addMinutes, formatDate, formatTime, formDerivedFields } from '../derived-fields.js'
+import { addMinutes, formatDate, formatTime, formSubmitValues } from '../submit-values/index.js'
 
-describe('derived formatted fields', () => {
+describe('submit values', () => {
   it('formats date values as YYYY-MM-DD', () => {
     expect(formatDate('2026-07-02')).toBe('2026-07-02')
     expect(formatDate('02/07/2026')).toBe('')
@@ -32,7 +32,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="random_formatted"]').value).toBe('2026-07-02')
   })
@@ -45,7 +45,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_time_formatted"]').value).toBe('09:30:00')
   })
@@ -58,7 +58,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_date_formatted"]').value).toBe('2026-07-02')
   })
@@ -72,7 +72,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_time_formatted"]').value).toBe('')
   })
@@ -85,7 +85,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_date_formatted"]')).toBeNull()
   })
@@ -99,7 +99,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="combined_asset_type"]').value).toBe('Diamond Jewellery')
   })
@@ -113,7 +113,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="combined_asset_type"]').value).toBe('Watches')
   })
@@ -126,7 +126,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="combined_asset_type"]')).toBeNull()
   })
@@ -160,7 +160,7 @@ describe('derived formatted fields', () => {
       </form>
     `
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
     return root.querySelector('[name="New_Lead_Type"]')
   }
 
@@ -203,7 +203,7 @@ describe('derived formatted fields', () => {
       </form>
     `
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="New_Lead_Type"]').value).toBe('SHP Customer')
   })
@@ -226,7 +226,7 @@ describe('derived formatted fields', () => {
       </form>
     `
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="New_Lead_Type"]')).toBeNull()
   })
@@ -241,7 +241,7 @@ describe('derived formatted fields', () => {
       </form>
     `
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     const fields = root.querySelectorAll('[name="New_Lead_Type"]')
     expect(fields).toHaveLength(1)
@@ -263,12 +263,12 @@ describe('derived formatted fields', () => {
       <form data-form="appointment">
         <input name="appointment_date" value="2026-07-09">
         <input name="appointment_time" value="14:00">
-        <input name="appointment_length" value="60">
+        <input type="radio" name="appointment_sub_type" value="Full consultation (30 to 60 minutes)" checked>
       </form>
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_start_datetime"]').value).toBe('2026-07-09T14:00:00')
     expect(root.querySelector('[name="appointment_end_datetime"]').value).toBe('2026-07-09T15:00:00')
@@ -279,12 +279,12 @@ describe('derived formatted fields', () => {
       <form data-form="appointment">
         <input name="appointment_date" value="2026-07-09">
         <input name="appointment_time" value="9:30">
-        <input name="appointment_length" value="15">
+        <input type="radio" name="appointment_sub_type" value="Drop off (15 minutes)" checked>
       </form>
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_start_datetime"]').value).toBe('2026-07-09T09:30:00')
     expect(root.querySelector('[name="appointment_end_datetime"]').value).toBe('2026-07-09T09:45:00')
@@ -298,7 +298,7 @@ describe('derived formatted fields', () => {
     `
 
     const root = document.querySelector('form')
-    formDerivedFields.apply(root)
+    formSubmitValues.apply(root)
 
     expect(root.querySelector('[name="appointment_start_datetime"]').value).toBe('')
     expect(root.querySelector('[name="appointment_end_datetime"]').value).toBe('')

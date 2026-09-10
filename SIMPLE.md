@@ -12,27 +12,32 @@
   committed bundle *is* the artefact; `.githooks/pre-commit` rebuilds and stages it
   so it cannot drift from `src/`.
 - Public contracts:
-  - Hidden field names written on submit — 56 of them, and Zapier maps them onto
+  - Hidden field names written on submit — 59 of them, and Zapier maps them onto
     Zoho fields BY NAME, so the name is the contract. They fall into four kinds,
-    and the kind tells you where the value could ever live:
+    and the kind tells you where the value could ever live. These counts are
+    maintained by hand and have drifted before; the generated table in the
+    private repo (`npm run field:docs`) is authoritative.
 
     | Kind | Count | Written by | Could it be declared in Webflow instead? |
     |---|---|---|---|
     | **Captured** — environment and browser state (`first_page`, `last_page`, `referrer_url`, `GCLID`, `fbclid`, `lead_reference`, `unique_id`, `quote_url`, `all_files_url`, `current_url`, `first_landing_url`, `address_mode`) | 12 | `core/conditions.js`, `address.js` | No — the value does not exist until runtime |
     | **Computed** — every gold money field and per-slot fan-out (`gold_*`, `bullion_name_N`, `weight_grams_N`) | 38 | `gold.js` | No — arithmetic, with purity and double 50p rounding |
-    | **Normalised** — `*_formatted`, `appointment_start_datetime`, `appointment_end_datetime`, `address_line_1_combined` | 4 | `derived-fields.js`, `address.js` | No — parsing and concatenation of unbounded input |
-    | **Decided** — `New_Lead_Type`, `combined_asset_type` | 2 | `derived-fields.js` | **Yes** — finite outcomes from enumerable answers |
+    | **Normalised** — `*_formatted`, `appointment_start_datetime`, `appointment_end_datetime`, `address_line_1_combined` | 4 | `submit-values/format-datetime.js`, `address.js` | No — parsing and concatenation of unbounded input |
+    | **Decided** — `New_Lead_Type`, `combined_asset_type`, `box_and_papers`, `meeting_venue`, `appointment_length` | 5 | `submit-values/business-rules.js` | Three of them WERE Designer truth tables; moved to code 9 Sep 2026 |
 
-    Only the two "Decided" fields are business rules. That is why
-    `derived-fields.js` reads as arbitrary: its name covers one field from three
-    different kinds. "Derived" is a category error, not bad code.
-  - Fields already DECLARED in the Designer rather than computed: `box_and_papers`,
-    `meeting_venue`, `appointment_length` — several `<input>`s sharing one name
-    inside `div.u-display-none`, each with a literal value and a
-    `data-form-show-if`, collapsed to one submitter by
-    `submit.singleValueFieldNames`. This is the pattern a "Decided" field would
-    move to. Note Webflow serves every copy live and the bundle renames the losers
-    at runtime, so with no JS the LAST one in DOM order wins.
+    All five "Decided" fields are business rules, in
+    `submit-values/business-rules.js`. Three of them — `box_and_papers`,
+    `meeting_venue`, `appointment_length` — were Designer truth tables until
+    9 September 2026. Their `<input>`s are still in the Designer and must stay
+    there until the new bundle SHA is live; see `designer-cleanup.md` in the
+    private repo for the deletion order.
+
+    `derived-fields.js` read as arbitrary because its name covered one field
+    from three different kinds. Split into `submit-values/`, where
+    `business-rules.js` holds the decisions and `format-datetime.js` the parsing.
+  - `submit.chooseOneFieldNames` now holds **only `bullion_name`** — a real
+    `<select>` the customer operates, so it cannot become a function. It needs
+    the Designer rename to indexed names instead.
   - The `data-form-*` attribute vocabulary that the Webflow Designer markup uses.
   - CMS `Input Value` strings that `gold.js` and the condition engine match on.
 - Persistent production data: none in this repository. Live submissions become Zoho
@@ -48,7 +53,7 @@
 
 - Two matching regimes, and they behave oppositely. `gold.js` compares through
   `normalizeSlug()` (case- and punctuation-insensitive); Webflow `show-if`/`hide-if`
-  rules compare exactly and case-sensitively. `derived-fields.js` compares
+  rules compare exactly and case-sensitively. `submit-values/business-rules.js` compares
   `asset_type === 'Other'` exactly. Know which one applies before renaming a value.
 - Every £ amount a customer or Zoho sees is a whole pound, and totals are the sum of
   whole-pound line items — not the rounded sum. This is what makes the on-screen

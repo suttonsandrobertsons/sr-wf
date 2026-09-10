@@ -1,6 +1,6 @@
 import { formConfig, fieldValidators } from "./config.js";
 import { formLogger, formApp, formValues } from "./core.js";
-import { debounce } from "./shared.js";
+import { debounce } from "../../utils/debounce.js";
 
 const cfg = formConfig.address;
 const UK_FILTER = cfg.ukOnly ? ["GB"] : null;
