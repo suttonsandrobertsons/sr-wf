@@ -125,8 +125,10 @@ const SHEET_TITLE = "Instant price for selling gold";
 
 const LOGO_SRC =
   "https://cdn.prod.website-files.com/69f9fedf076067055e5a003f/6a0d90563499d746736461af_logo.svg";
+// Only the four faces the sheet actually uses. Jost 300 was requested and
+// never drawn — the site's 300 weight belongs to rich-text blocks, not UI copy.
 const FONTS =
-  "https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Jost:wght@300;400;500&display=swap";
+  "https://fonts.googleapis.com/css2?family=EB+Garamond:wght@400;500&family=Jost:wght@400;500&display=swap";
 
 function field(root, name) {
   const el = root.querySelector(`[name="${name}"]`);
