@@ -1069,9 +1069,12 @@ function persistItemSlotFields(form, summary) {
     w(`gold_item_${index}_quantity`, item?.quantity);
     w(`gold_item_${index}_bullion_name`, item?.bullionName);
     // Combined description, not the raw label — see toItemDescription.
-    // gold_item_${index}_metal_type above still carries the bare carat: the
-    // Zap is not ours to read, so both are sent until the client confirms the
-    // new value lands, then the duplicate goes in its own commit.
+    //
+    // Both this and gold_item_${index}_metal_type are sent until the client
+    // publishes the Zap draft; then the duplicate goes in its own commit. An
+    // earlier comment here said metal_type "still carries the bare carat" —
+    // it does not, toItemMetal emits "18ct Gold". The bare carat is
+    // gold_metal_type_${index}, the raw repeater control.
     w(`bullion_name_${index}`, item ? toItemDescription(item) : "");
     // Zoho's Item_N_Bullion_Type is a 38-option COIN AND BAR list — jewellery
     // has no valid value in it and never will. bullion_name_N now carries the
@@ -1079,11 +1082,13 @@ function persistItemSlotFields(form, summary) {
     // Type alone: a valid option for coins and bars, empty for jewellery.
     // Without it a jewellery lead stores an unlisted string there, which Zoho
     // keeps but cannot group, filter or report on.
-    // Also empty for a MANUAL row: choosing "Other" or "I'm not sure" gives a
-    // synthesised label of "Other"/"Unsure" (see findPricingRow), and neither
-    // is one of the 38 Bullion Type options. Sending it would reintroduce the
-    // exact defect this field exists to fix — Zoho stores an unlisted string
-    // rather than rejecting it, so it fails silently as data.
+    // Also empty for a MANUAL row, which is the one case that is arguably
+    // wrong. "Other", "Other Coins" and "Unsure" ARE valid Bullion Type
+    // options — an earlier comment here claimed they were not — so a manual
+    // coin or bar could send its synthesised label rather than nothing.
+    // Left as-is because no live bullion select currently offers an
+    // "Other"/"Unsure" choice, so the manual path is unreachable and
+    // gold_item_N_manual is always false. Revisit if that option returns.
     w(
       `gold_item_${index}_bullion_type`,
       item && !item.manual && normalizeSlug(item.itemType) !== "jewellery" ? item.label : "",

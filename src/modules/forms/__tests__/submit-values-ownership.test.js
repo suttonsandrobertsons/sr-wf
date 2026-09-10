@@ -93,8 +93,12 @@ describe('submit-values owns its field names', () => {
   })
 
   it('keeps a home-visit drop-off at 15, as the Designer rows did', () => {
-    // Rows 1 and 3 both match and the old mechanism took the first. Check
-    // home-visit first and this returns 60.
+    // Row order, not a real customer path: appointment_sub_type is
+    // condition-hidden for a home visit (its rule is
+    // "appointment_type != Home visit or private office"), so get() skips it
+    // and a live home visit resolves to 60 under both mechanisms. Kept
+    // because it pins the FIRST-MATCH ordering — checking home-visit first
+    // would return 60 here and silently change the two reachable rows.
     const root = boot(`
       <input type="radio" name="appointment_type" value="Home visit or private office" checked>
       <input type="radio" name="appointment_sub_type" value="Drop off (15 minutes)" checked>`)

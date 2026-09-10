@@ -93,8 +93,10 @@ export function writeFormattedFields(root, write) {
  * Depends on appointment_length, which a business rule sets, so this runs
  * after the rules. Reorder them and every end datetime goes empty.
  *
- * Reads via get(), so the home-visit path emits nothing: its date and time
- * controls are condition-hidden.
+ * Reads via get(), which skips condition-hidden controls. Note the date and
+ * time wrappers carry an EMPTY data-form-show-if on the live pages, so they
+ * are always shown — a previous comment here claimed the home-visit path
+ * emits nothing, which is false.
  */
 export function writeAppointmentDatetimes(root, write) {
   const date = formatDate((formValues.get(root, 'appointment_date')[0] || '').trim())
