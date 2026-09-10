@@ -131,6 +131,28 @@ describe("quote sheet", () => {
     expect(html).toContain("&lt;script&gt;");
   });
 
+  it("uses the brand values measured from the live site", () => {
+    // Measured with Chromium computed styles on 10 Sep 2026, because the token
+    // names alone are misleading: --_theme---section--text reads #111420 but
+    // every rendered paragraph and figure computes to navy #262c46, and the
+    // 300 weight in --_rich-text---body--fw applies only to rich-text blocks.
+    // These assertions exist so a later tidy-up cannot quietly drift off brand.
+    const html = sheet(readQuote(buildForm(TWO_ITEMS)));
+
+    expect(html).toContain("--navy:#262c46");
+    expect(html).toContain("--midnight:#111420");
+    expect(html).toContain("--gold:#ae9a64");
+    // The site's own --_theme---table--border, not the #dcdee4 I first picked.
+    expect(html).toContain("--rule:#edeffa");
+    // Body: Jost 400 navy, not weight 300 and not midnight.
+    expect(html).toContain("font-weight:400");
+    expect(html).not.toContain("font-weight:300");
+    // The micro-label treatment: Jost 500, 12px, 0.07em, uppercase.
+    expect(html).toContain("letter-spacing:.07em");
+    expect(html).not.toContain("letter-spacing:.16em");
+    expect(html).toContain("'EB Garamond',Georgia,sans-serif");
+  });
+
   it("carries the site's own footer verbatim, and the reference", () => {
     const html = sheet(readQuote(buildForm(TWO_ITEMS)));
 

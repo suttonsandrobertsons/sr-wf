@@ -220,63 +220,91 @@ function sheet(quote) {
 <html><head><meta charset="utf-8"><title>Gold calculator — ${esc(quote.reference)}</title>
 <link rel="stylesheet" href="${FONTS}">
 <style>
-  /* The print margin lives on @page so the browser owns it. Screen padding is
-     separate and screen-only, or the sheet renders flush to the edge in a
-     preview and gets double margins when printed. */
+  /* BRAND. Measured from the live site with Chromium computed styles on
+     10 Sep 2026, not eyeballed and not taken from the token names alone —
+     several tokens are overridden in practice. What the site actually renders:
+
+       h1              EB Garamond 400, line-height 1, midnight #111420
+       h3              EB Garamond 400, line-height 1, navy #262c46
+       h2 (small)      EB Garamond 500, line-height 1, midnight
+       "Item 1"        EB Garamond 400, 1.625rem, navy
+       body + figures  Jost 400, 1rem, line-height 1.2, NAVY #262c46
+       micro-label     Jost 500, 0.75rem, letter-spacing 0.07em, uppercase
+       row border      #edeffa, the site's own --_theme---table--border
+
+     Two corrections to earlier drafts. Body text is NAVY, not midnight: the
+     --_theme---section--text token reads #111420 but every rendered paragraph,
+     label and figure computes to #262c46, and midnight is reserved for
+     headings. And body weight is 400 — the 300 in --_rich-text---body--fw
+     applies only inside rich-text blocks, not to UI copy.
+
+     THE SITE HAS NO TABLES. Nothing on any page renders a <table>, so the row
+     rules, the head rule and the column rhythm have no brand precedent to copy
+     and are built from brand atoms: navy for the structural head rule,
+     --_theme---table--border for the row rules.
+
+     DELIBERATE DEVIATIONS, all of them scale, none of them colour, weight or
+     face. The site is fluid type on a 1440px viewport; this is a fixed 210mm
+     page, so sizes step down the brand's own scale rather than sitting at the
+     web value: h1 uses --_type---title--xs (1.625rem) where the page uses
+     3.375rem, and the item name uses 1.125rem where "Item 1" uses 1.625rem —
+     at 1.625rem six item rows plus the legal footer do not fit on one A4 page,
+     which is the whole point of the sheet. The legal paragraph is 8px because
+     the footer's own 1rem would run to four lines. */
   @page { size: A4; margin: 16mm 15mm }
   @media screen {
     html { background:#f4f4f6; padding:24px 0 }
     body { width:210mm; min-height:297mm; margin:0 auto; padding:16mm 15mm;
            background:#fff; box-shadow:0 1px 24px rgba(17,20,32,.14) }
   }
-  /* Brand tokens, copied from the site's own stylesheet rather than picked by
-     eye: --_color---navy--100, ---midnight--100, ---gold--100,
-     ---grey-500--100, and ---sky-blue--100, which the site itself assigns to
-     --_theme---table--border. The rule colour used to be #dcdee4, which is in
-     no palette. */
-  :root { --navy:#262c46; --midnight:#111420; --gold:#ae9a64;
-          --rule:#edeffa; --mute:#6b7094 }
+  :root {
+    --navy:#262c46; --midnight:#111420; --gold:#ae9a64;
+    --rule:#edeffa; --mute:#6b7094;
+    --title:'EB Garamond',Georgia,sans-serif; --body:Jost,Arial,sans-serif;
+  }
   * { box-sizing:border-box }
-  /* The site sets --_theme---section--text to midnight, not navy, and its body
-     weight to 300. Navy is a border and accent colour here, not body text. */
-  body { font-family:Jost,Arial,sans-serif; font-weight:300; color:var(--midnight);
-         margin:0; display:flex; flex-direction:column; min-height:calc(297mm - 32mm) }
+  body { font-family:var(--body); font-weight:400; font-size:16px; line-height:1.2;
+         color:var(--navy); margin:0;
+         display:flex; flex-direction:column; min-height:calc(297mm - 32mm) }
   .head { display:flex; justify-content:space-between; align-items:flex-start }
   .head img { height:32px; width:auto }
-  .meta { text-align:right; font-size:10px; line-height:1.8; color:var(--mute) }
-  .meta b { color:var(--navy); font-weight:500; letter-spacing:.04em }
-  h1 { font-family:'EB Garamond',Georgia,sans-serif; font-weight:400; font-size:31px;
+  .meta { text-align:right; font-size:11px; line-height:1.6; color:var(--navy) }
+  .meta b { font-weight:500; letter-spacing:.07em }
+  h1 { font-family:var(--title); font-weight:400; font-size:26px; line-height:1;
        margin:44px 0 0; color:var(--midnight) }
   .rule { height:1px; background:var(--gold); margin-top:18px }
-  .basis { display:flex; gap:40px; margin-top:30px }
-  .k { font-size:8px; letter-spacing:.16em; text-transform:uppercase; color:var(--mute); font-weight:500 }
-  .v { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight); margin-top:5px }
-  table { width:100%; border-collapse:collapse; margin-top:38px }
-  /* Every column is right-aligned except the item description, and each numeric
-     column carries its own left gutter. Without the gutter, right-aligned
-     Quantity sits hard against the next column and the two read as one figure
-     (client feedback, 10 Sep 2026). 28px is the narrowest gap that still
-     separates them at this type size. */
+  .basis { margin-top:30px }
+  /* The site's uppercase micro-label, exactly: Jost 500, 12px, 0.07em. */
+  .k { font-family:var(--body); font-weight:500; font-size:12px; line-height:1;
+       letter-spacing:.07em; text-transform:uppercase; color:var(--gold) }
+  .v { font-size:16px; line-height:1.2; color:var(--navy); margin-top:7px }
+  table { width:100%; border-collapse:collapse; margin-top:36px }
+  /* Every column right-aligned except the description, each numeric column with
+     its own left gutter: without it a right-aligned Quantity sits against the
+     next column and the two read as one figure (client feedback, 10 Sep 2026). */
   th, td { text-align:right; padding-left:28px }
   th:first-child, td:first-child { text-align:left; padding-left:0; padding-right:28px }
-  th { font-size:8px; letter-spacing:.16em; text-transform:uppercase; color:var(--mute);
-       font-weight:500; padding-bottom:11px; border-bottom:1px solid var(--navy) }
+  th { font-family:var(--body); font-weight:500; font-size:12px; line-height:1;
+       letter-spacing:.07em; text-transform:uppercase; color:var(--gold);
+       padding-bottom:12px; border-bottom:1px solid var(--navy) }
   td { padding-top:15px; padding-bottom:15px; border-bottom:1px solid var(--rule);
        vertical-align:top }
-  .desc { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight) }
-  .descsub { font-size:9.5px; color:var(--mute); margin-top:3px }
-  .num { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight) }
-  /* The manual sentence is 60 characters in a numeric column. Balanced wrapping
-     keeps it as even lines rather than one long line and one orphan word. */
-  .prompt { font-size:9.5px; line-height:1.65; color:var(--mute); text-align:right;
+  .desc { font-family:var(--title); font-weight:400; font-size:18px; line-height:1.05;
+          color:var(--navy) }
+  .descsub { font-size:11px; line-height:1.2; color:var(--mute); margin-top:4px }
+  .num { font-size:16px; line-height:1.2; color:var(--navy) }
+  .prompt { font-size:11px; line-height:1.4; color:var(--mute); text-align:right;
             text-wrap:balance }
-  .estimate { margin-top:32px; display:flex; align-items:flex-end; justify-content:space-between; gap:40px }
-  .estimate .title { font-family:'EB Garamond',Georgia,sans-serif; font-size:18px; color:var(--midnight) }
+  .estimate { margin-top:34px; display:flex; align-items:flex-end;
+              justify-content:space-between; gap:40px }
+  .estimate .title { font-family:var(--title); font-weight:500; font-size:20px;
+                     line-height:1; color:var(--midnight) }
   .figs { display:flex; gap:56px; text-align:right }
-  .big { font-family:'EB Garamond',Georgia,sans-serif; font-size:26px; color:var(--midnight); margin-top:5px; line-height:1 }
+  .big { font-size:20px; line-height:1; color:var(--navy); margin-top:7px }
   .spacer { flex:1; min-height:28px }
-  footer { font-size:7.5px; line-height:1.75; color:var(--mute); padding-top:18px;
-           border-top:1px solid var(--rule); display:flex; justify-content:space-between; gap:30px }
+  footer { font-size:8px; line-height:1.7; color:var(--mute); padding-top:18px;
+           border-top:1px solid var(--rule); display:flex;
+           justify-content:space-between; gap:30px }
   footer div:last-child { text-align:right; white-space:nowrap }
 </style></head><body>
   <div class="head">
