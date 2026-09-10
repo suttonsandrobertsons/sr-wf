@@ -26,11 +26,12 @@ import { join } from "node:path";
 //     getLeadReference builds that from the surname — falling back to "SR"
 //     when there is no name, which is indistinguishable from a real enquiry.
 //     stampTestReference() sets last_name first, so every object lands under
-//     E2ETEST-XXXX-XXXX/ and the whole run can be found and deleted by prefix.
+//     AUTOMATEDTEST-XXXX-XXXX/ and the whole run can be found and deleted
+//     by prefix.
 //  3. The filename says so too.
 //
 // Each full run writes exactly two objects (the third test is rejected before
-// the Worker is called). Delete them with the R2 prefix E2ETEST-.
+// the Worker is called). Delete them with the R2 prefix AUTOMATEDTEST-.
 
 const GET_A_QUOTE = "/get-a-quote";
 
@@ -61,7 +62,7 @@ const JPEG_1PX = Buffer.from(
  *
  * last_name goes through `answers`, which the driver pins: its generic filler
  * would otherwise put "test" in every unrecognised text input and the objects
- * would land under TEST- instead of E2ETEST-.
+ * would land under TEST- instead of AUTOMATEDTEST-.
  */
 async function goToUploadStep(page) {
   await page.goto(GET_A_QUOTE);

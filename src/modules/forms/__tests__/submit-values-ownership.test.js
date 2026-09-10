@@ -4,12 +4,14 @@ import { describe, expect, it } from 'vitest'
 import { formSubmitValues } from '../submit-values/index.js'
 import { submittedFields } from './helpers/webflow-submit.js'
 
-// Covers the case where a rule DECLINES to answer while the legacy Designer
-// inputs are still on the page. The rule must still rename them, or Webflow
-// collapses the duplicates to the last in document order and Zoho gets a wrong
-// value instead of none. A first version skipped that and shipped the bug.
+// Covers the case where a rule DECLINES to answer while a same-named Designer
+// input is on the page. The rule must still rename it, or Webflow collapses the
+// duplicates to the last in document order and Zoho gets a wrong value instead
+// of none. A first version skipped that and shipped the bug.
 //
-// Delete these once designer-cleanup.md is done and no same-named inputs remain.
+// The eleven inputs this was written for were deleted on 10 Sep 2026, so these
+// no longer describe the live pages. They are kept deliberately: the renaming
+// is what makes re-adding one harmless, and nothing else asserts it.
 describe('submit-values owns its field names', () => {
   const boot = (html) => {
     document.body.innerHTML = `<form data-form="quote">${html}</form>`

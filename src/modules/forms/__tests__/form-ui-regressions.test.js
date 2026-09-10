@@ -402,8 +402,9 @@ describe('form UI regressions', () => {
   })
 
   // Was a choose-one test over four same-named hidden inputs. box_and_papers is
-  // now a business rule, so this asserts the rule wins even while the old
-  // Designer inputs are still on the page — the state during migration.
+  // now a business rule, so this asserts the rule wins even when a same-named
+  // Designer input is present. Those inputs were deleted on 10 Sep 2026; this
+  // keeps the guarantee that re-adding one cannot beat the rule.
   //
   // Radios because that is what the live forms use. (formValues.get reads
   // type="hidden" too — an earlier version of this comment claimed otherwise.)
