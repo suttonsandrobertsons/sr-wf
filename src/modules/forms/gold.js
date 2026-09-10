@@ -1027,27 +1027,27 @@ function toItemTypeSubmitLabel(itemType) {
   return ITEM_TYPE_SUBMIT_LABELS[itemType] || itemType;
 }
 
-// Feeds the single readable per-item description Sam asked for (10 Aug 2026
-// doc: "combine this all into one single field"). Jewellery becomes
-// "18ct Gold" rather than the bare "18ct"; coins and bars keep their CMS label
-// untouched ("Gold Sovereign", "100g Gold Bar") — his note against both was
-// "no change".
+// The single combined per-item field the client asked for (10 Aug 2026 doc:
+// "combine this all into one single field"), matching their table exactly:
 //
-// NOT "18ct Gold Jewellery", even though that is the string in his doc,
-// because Item_N_Description already appends the item type: it composes as
-// "<first token> {qty} {gold_item_N_type}", so the full phrase would read
-// "18ct Gold Jewellery 2 Jewellery".
+//   Jewellery  ->  "9ct Gold Jewellery"      (change requested)
+//   Coins      ->  "1/2 Oz Gold Krugerrand"  (their note: no change)
+//   Bars       ->  "1g Gold Bar"             (their note: no change)
 //
-// CORRECTION, 10 Sep 2026. This comment claimed the first token was
-// bullion_name_N. It is not — v24 reads gold_item_N_label, which for
-// jewellery is the bare "18ct". The evidence originally cited here,
-// "9ct 2 Jewellery", is itself the proof: bullion_name_N would have given
-// "9ct Gold 2 Jewellery". For a coin the two fields hold the same string, so
-// the stored leads that were checked could not tell them apart.
+// So coins and bars pass their CMS label through untouched and only jewellery
+// is composed, from the carat plus the item-type label.
 //
-// A draft re-points Item_N_Description to bullion_name_N on all five slots,
-// which is what makes "18ct Gold 1 Jewellery" reach Zoho. Until it is
-// published a jewellery row still reads "18ct 1 Jewellery".
+// WHY THE FULL PHRASE, when an earlier version sent the bare "9ct Gold".
+// Item_N_Description composes as "<this> {qty} {gold_item_N_type}", so the
+// full phrase used to read "9ct Gold Jewellery 1 Jewellery". That was treated
+// as a reason the client could not have what they asked for, which was wrong:
+// the template is theirs and they are editing it anyway. The Zap draft drops
+// the trailing {{gold_item_N_type}}, so the description now reads
+// "9ct Gold Jewellery 1" and the field itself carries their exact string.
+//
+// This value is NOT what feeds Zoho's Metal picklist — that is
+// gold_item_N_metal_type, which must stay "9ct Gold" because it is a fixed
+// list and the longer phrase is not on it. The two fields differ on purpose.
 //
 // Falls back to the plain label whenever the carat cannot be read, so the
 // worst case is today's behaviour rather than an empty field.
@@ -1067,7 +1067,10 @@ function toItemDescription(item) {
   if (normalizeSlug(item?.itemType) !== "jewellery") return label;
 
   const carats = parseNumber(item?.metalType);
-  return Number.isFinite(carats) && carats > 0 ? `${carats}ct Gold` : label;
+  if (!Number.isFinite(carats) || carats <= 0) return label;
+
+  const kind = toItemTypeSubmitLabel(item?.itemType) || "Jewellery";
+  return `${carats}ct Gold ${kind}`;
 }
 
 function persistItemSlotFields(form, summary) {

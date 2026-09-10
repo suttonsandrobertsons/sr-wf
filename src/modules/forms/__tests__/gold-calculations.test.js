@@ -1438,18 +1438,23 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
     return out
   }
 
-  it('describes jewellery as "<carat>ct Gold", letting the Zap append the type', () => {
-    // Item_N_Description composes as "<first token> {qty} {gold_item_N_type}",
-    // so it appends the type itself: emitting "9ct Gold Jewellery" here would
-    // store "9ct Gold Jewellery 2 Jewellery".
+  it('describes jewellery as "<carat>ct Gold Jewellery", the client\'s exact wording', () => {
+    // Their 10 Aug table asked for "9ct Gold Jewellery" and this now sends it
+    // verbatim. An earlier build sent the bare "9ct Gold" on the grounds that
+    // Item_N_Description appends {{gold_item_N_type}} and the full phrase
+    // would read "9ct Gold Jewellery 1 Jewellery" — but that template is the
+    // client's and the Zap draft drops the trailing token, so the description
+    // reads "9ct Gold Jewellery 1".
     //
-    // An earlier version of this comment said the first token was
-    // bullion_name_N. v24 reads gold_item_N_label ("9ct"); a draft re-points
-    // it to bullion_name_N, which is what makes "9ct Gold 1 Jewellery" land.
-    expect(slotValues([{ itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' }]).description1)
-      .toBe('9ct Gold')
+    // Note this is deliberately NOT the same value as gold_item_N_metal_type,
+    // which stays "9ct Gold" because Zoho's Metal picklist has no option for
+    // the longer phrase. Asserted together below so the two cannot drift.
+    const nine = slotValues([{ itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' }])
+    expect(nine.description1).toBe('9ct Gold Jewellery')
+    expect(nine.metalType1).toBe('9ct Gold')
+
     expect(slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }]).description1)
-      .toBe('18ct Gold')
+      .toBe('18ct Gold Jewellery')
   })
 
   it('emits the carat as a valid Item_N_Metal option, not the bare number', () => {
@@ -1524,7 +1529,7 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
       { itemType: 'jewellery', metalType: '22', weightGrams: '5', quantity: '1' },
       { itemType: 'coin', bullionName: 'sovereign', quantity: '2' },
     ])
-    expect(v.description1).toBe('22ct Gold')
+    expect(v.description1).toBe('22ct Gold Jewellery')
     expect(v.description2).toBe('Sovereign')
   })
 })
