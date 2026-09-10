@@ -84,8 +84,10 @@ describe("quote sheet", () => {
   });
 
   it("reads however many slots the form carries, not a hardcoded five", () => {
-    // The cap is data-form-gold-max-items in the Designer. A MAX_ITEMS of our
-    // own would drop item 6 silently the day the client raises it.
+    // The live cap IS five — data-form-gold-max-items="5", MAX_ITEMS in
+    // gold.js, five slots in the Zoho mappings. This asserts the sheet is not
+    // the component that breaks when that moves; it is not a claim that six
+    // items are available, and raising the cap needs the Zap extended too.
     const quote = readQuote(buildForm({
       ...TWO_ITEMS,
       bullion_name_6: "x", gold_item_6_label: "1 Oz Gold Britannia",
@@ -275,6 +277,18 @@ describe("quote sheet", () => {
     expect(html).toContain(formatMoney(855));
     expect(html).not.toContain(formatMoney(983));
     expect(html).not.toContain(formatMoney(653));
+  });
+
+  it("prints whole pounds only, never an intermediate with pence", () => {
+    // The 50p MROUND step legitimately produces figures like 937.50, but that
+    // is an intermediate: roundWholePound turns it into 938 for the hidden
+    // field, and formatMoney renders 938 on screen. A sheet showing £937.50
+    // beside a screen showing £938 is the drift this module exists to prevent.
+    const html = sheet(readQuote(buildForm(TWO_ITEMS)));
+
+    expect(html).not.toMatch(/£[\d,]+\.\d/);
+    expect(formatMoney(937.5)).toBe("£938");
+    expect(formatMoney(817.5)).toBe("£818");
   });
 
   it("prints the hidden field values unchanged, doing no arithmetic of its own", () => {

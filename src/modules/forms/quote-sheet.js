@@ -175,8 +175,15 @@ function printedAt(now = new Date()) {
 
 // The slots the form actually carries, in order. Read from the DOM rather than
 // against a MAX_ITEMS of our own: the cap lives in the Designer markup as
-// data-form-gold-max-items, so a second copy of "5" here would silently drop
-// item 6 the day the client raises it.
+// data-form-gold-max-items, so a second copy of it here would silently drop a
+// row the day the client raises it.
+//
+// The live cap is FIVE. This function is uncapped so the sheet cannot be the
+// thing that breaks when the cap moves — not a claim that six is allowed.
+// Raising it is more than a Designer edit: gold.js writes slot fields up to
+// max(MAX_ITEMS, the attribute), but the Zaps map five slots by name, so a
+// sixth item's fields would reach Zapier and land nowhere in Zoho until the
+// client extends the mapping. Page fit is also only proven to six rows.
 function itemSlots(root) {
   const found = [];
   root.querySelectorAll('[name^="bullion_name_"]').forEach((input) => {
@@ -277,9 +284,15 @@ function sheet(quote) {
      page, so sizes step down the brand's own scale rather than sitting at the
      web value: h1 uses --_type---title--xs (1.625rem) where the page uses
      3.375rem, and the item name uses 1.125rem where "Item 1" uses 1.625rem —
-     at 1.625rem six item rows plus the legal footer do not fit on one A4 page,
+     at 1.625rem the item rows plus the legal footer do not fit on one A4 page,
      which is the whole point of the sheet. The legal paragraph is 8px because
-     the footer's own 1rem would run to four lines. */
+     the footer's own 1rem would run to four lines.
+
+     PAGE FIT. The live calculator's cap is FIVE — data-form-gold-max-items="5"
+     in the Designer markup, MAX_ITEMS in gold.js, and five slots in the Zoho
+     field mappings. Measured in Chromium: five rows and six rows each render
+     as one page, seven does not. So there is a row of headroom above the
+     current cap, and none above six. */
   @page { size: A4; margin: 16mm 15mm }
   @media screen {
     html { background:#f4f4f6; padding:24px 0 }
