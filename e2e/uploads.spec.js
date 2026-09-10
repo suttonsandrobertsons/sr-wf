@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { advanceToEnd } from "./helpers/forms.js";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -15,10 +16,32 @@ import { join } from "node:path";
 // exercise the path a customer takes. The hook's premise — that browser
 // automation cannot drive a native file picker — was never true here.
 //
-// These POST to the real Worker and write real objects to R2 under a test
-// reference. They do NOT submit a form, so no lead reaches Zoho.
+// CLIENT SAFETY. These POST to the real Worker and write real objects into the
+// client's R2 bucket. They do NOT submit a form, so no lead reaches Zoho, but
+// the objects are real and they persist. Three things keep them safe to leave:
+//
+//  1. The content is a synthetic 1x1 JPEG generated here. No customer data,
+//     no real photograph, ~200 bytes.
+//  2. The FOLDER is labelled. R2 is organised by lead reference, and
+//     getLeadReference builds that from the surname — falling back to "SR"
+//     when there is no name, which is indistinguishable from a real enquiry.
+//     stampTestReference() sets last_name first, so every object lands under
+//     E2ETEST-XXXX-XXXX/ and the whole run can be found and deleted by prefix.
+//  3. The filename says so too.
+//
+// Each full run writes exactly two objects (the third test is rejected before
+// the Worker is called). Delete them with the R2 prefix E2ETEST-.
 
 const GET_A_QUOTE = "/get-a-quote";
+
+// Written into last_name BEFORE the first file is picked. The reference is
+// generated once per form on file-select and cached, so this has to happen
+// first or the folder is already named.
+//
+// LETTERS ONLY. getLeadReference strips the surname to /[^A-Z]/, so "E2ETEST"
+// silently became the folder "EETEST-..." on the first real run and this
+// spec's own folder assertion caught it. Do not put a digit in here.
+const TEST_SURNAME = "AUTOMATEDTEST";
 
 // A 1x1 JPEG. Small on purpose: the point is the client path, not the bytes.
 const JPEG_1PX = Buffer.from(
@@ -28,7 +51,35 @@ const JPEG_1PX = Buffer.from(
   "base64",
 );
 
-function jpegOnDisk(name = "qa-upload.jpg") {
+/**
+ * Open the page and walk to the upload step, with the R2 folder named.
+ *
+ * The widgets live on step 3. Until the form is walked there they are
+ * step-hidden, so Playwright's actionability check never resolves, the click
+ * never lands and waitForEvent("filechooser") times out — which is exactly how
+ * all three of these failed the first time they were ever run.
+ *
+ * last_name goes through `answers`, which the driver pins: its generic filler
+ * would otherwise put "test" in every unrecognised text input and the objects
+ * would land under TEST- instead of E2ETEST-.
+ */
+async function goToUploadStep(page) {
+  await page.goto(GET_A_QUOTE);
+  await advanceToEnd(page, "get-a-quote", {
+    asset_type: "Watches",
+    last_name: TEST_SURNAME,
+  });
+
+  const widget = page.locator("[data-form-upload]").first();
+  await expect(widget, "the upload step should be reachable").toBeVisible({ timeout: 15_000 });
+
+  const surname = await page.evaluate(() =>
+    document.querySelector('[data-form="get-a-quote"] [name="last_name"]')?.value);
+  expect(surname, "last_name must be set before uploading or R2 gets an unlabelled folder")
+    .toBe(TEST_SURNAME);
+}
+
+function jpegOnDisk(name = `${TEST_SURNAME}-not-a-real-upload.jpg`) {
   const path = join(mkdtempSync(join(tmpdir(), "sr-e2e-")), name);
   writeFileSync(path, JPEG_1PX);
   return path;
@@ -47,7 +98,7 @@ async function pickFile(page, widgetIndex, filePath) {
 
 test.describe("upload widget — the real picker path", () => {
   test("a picked file uploads and populates the widget's value field", async ({ page }) => {
-    await page.goto(GET_A_QUOTE);
+    await goToUploadStep(page);
     const widget = await pickFile(page, 0, jpegOnDisk());
 
     // The widget reports progress, then settles with a value. The value field is
@@ -59,13 +110,25 @@ test.describe("upload widget — the real picker path", () => {
       .toMatch(/^https?:\/\//);
 
     await expect(widget).not.toHaveAttribute("data-form-state", /loading/);
+
+    // The safety property, asserted rather than assumed: the object must be in
+    // a folder this run can be identified by. If the reference ever stops
+    // deriving from last_name, this fails here instead of quietly seeding the
+    // client's bucket with objects that look like real enquiries.
+    const storedUrl = await widget
+      .locator("[data-form-upload-value-image], [data-form-upload-value-file]")
+      .first().inputValue();
+    // The Worker percent-encodes the object key, so the folder separators are
+    // %2F and a raw "/PREFIX-" never matches. Decode before asserting.
+    expect(decodeURIComponent(storedUrl), `uploaded outside the test folder: ${storedUrl}`)
+      .toContain(`/uploads/${TEST_SURNAME}-`);
   });
 
   test("submit is blocked while an upload is in flight", async ({ page }) => {
     // formUploads.validate returns false whenever a widget is loading, whether
     // or not the field is required — otherwise the form hands off with an empty
     // URL and the lead arrives with no file.
-    await page.goto(GET_A_QUOTE);
+    await goToUploadStep(page);
     const widget = await pickFile(page, 0, jpegOnDisk());
 
     await expect(widget).toHaveAttribute("data-form-state", /loading/, { timeout: 5_000 });
@@ -80,8 +143,8 @@ test.describe("upload widget — the real picker path", () => {
   });
 
   test("a rejected file type never reaches the Worker", async ({ page }) => {
-    await page.goto(GET_A_QUOTE);
-    const path = join(mkdtempSync(join(tmpdir(), "sr-e2e-")), "not-an-image.txt");
+    await goToUploadStep(page);
+    const path = join(mkdtempSync(join(tmpdir(), "sr-e2e-")), `${TEST_SURNAME}-not-an-image.txt`);
     writeFileSync(path, "plain text");
 
     const posts = [];
@@ -91,7 +154,9 @@ test.describe("upload widget — the real picker path", () => {
 
     const widget = await pickFile(page, 0, path);
 
-    await expect(widget).toHaveAttribute("data-form-state", /error/, { timeout: 10_000 });
+    // The widget's rejected state is "invalid", not "error" — setError()
+    // sets loading:false, invalid:true, uploaded:false.
+    await expect(widget).toHaveAttribute("data-form-state", /invalid/, { timeout: 10_000 });
     expect(posts, "client validation must reject before the Worker call").toEqual([]);
   });
 });
