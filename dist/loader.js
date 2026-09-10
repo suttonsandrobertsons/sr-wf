@@ -79,9 +79,13 @@
      next column and the two read as one figure (client feedback, 10 Sep 2026). */
   th, td { text-align:right; padding-left:28px }
   th:first-child, td:first-child { text-align:left; padding-left:0; padding-right:28px }
-  th { font-family:var(--body); font-weight:500; font-size:12px; line-height:1;
+  /* "Weight (grams)" is the only header that wraps to two lines. A table cell
+     defaults to vertical-align:middle, so the one-line headers centred against
+     it and sat lower than its first line; top-aligning every header starts all
+     of them on the same line. */
+  th { font-family:var(--body); font-weight:500; font-size:12px; line-height:1.25;
        letter-spacing:.07em; text-transform:uppercase; color:var(--gold);
-       padding-bottom:12px; border-bottom:1px solid var(--navy) }
+       vertical-align:top; padding-bottom:12px; border-bottom:1px solid var(--navy) }
   td { padding-top:15px; padding-bottom:15px; border-bottom:1px solid var(--rule);
        vertical-align:top }
   .desc { font-family:var(--title); font-weight:400; font-size:18px; line-height:1.05;
