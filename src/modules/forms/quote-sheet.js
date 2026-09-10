@@ -229,38 +229,51 @@ function sheet(quote) {
     body { width:210mm; min-height:297mm; margin:0 auto; padding:16mm 15mm;
            background:#fff; box-shadow:0 1px 24px rgba(17,20,32,.14) }
   }
-  :root { --navy:#262c46; --midnight:#111420; --gold:#ae9a64; --rule:#dcdee4; --mute:#6b7094 }
+  /* Brand tokens, copied from the site's own stylesheet rather than picked by
+     eye: --_color---navy--100, ---midnight--100, ---gold--100,
+     ---grey-500--100, and ---sky-blue--100, which the site itself assigns to
+     --_theme---table--border. The rule colour used to be #dcdee4, which is in
+     no palette. */
+  :root { --navy:#262c46; --midnight:#111420; --gold:#ae9a64;
+          --rule:#edeffa; --mute:#6b7094 }
   * { box-sizing:border-box }
-  body { font-family:Jost,Arial,sans-serif; color:var(--navy); margin:0;
-         display:flex; flex-direction:column; min-height:calc(297mm - 32mm) }
+  /* The site sets --_theme---section--text to midnight, not navy, and its body
+     weight to 300. Navy is a border and accent colour here, not body text. */
+  body { font-family:Jost,Arial,sans-serif; font-weight:300; color:var(--midnight);
+         margin:0; display:flex; flex-direction:column; min-height:calc(297mm - 32mm) }
   .head { display:flex; justify-content:space-between; align-items:flex-start }
   .head img { height:32px; width:auto }
   .meta { text-align:right; font-size:10px; line-height:1.8; color:var(--mute) }
   .meta b { color:var(--navy); font-weight:500; letter-spacing:.04em }
-  h1 { font-family:'EB Garamond',Georgia,serif; font-weight:400; font-size:31px;
+  h1 { font-family:'EB Garamond',Georgia,sans-serif; font-weight:400; font-size:31px;
        margin:44px 0 0; color:var(--midnight) }
   .rule { height:1px; background:var(--gold); margin-top:18px }
   .basis { display:flex; gap:40px; margin-top:30px }
   .k { font-size:8px; letter-spacing:.16em; text-transform:uppercase; color:var(--mute); font-weight:500 }
-  .v { font-family:'EB Garamond',serif; font-size:16px; color:var(--midnight); margin-top:5px }
+  .v { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight); margin-top:5px }
   table { width:100%; border-collapse:collapse; margin-top:38px }
+  /* Every column is right-aligned except the item description, and each numeric
+     column carries its own left gutter. Without the gutter, right-aligned
+     Quantity sits hard against the next column and the two read as one figure
+     (client feedback, 10 Sep 2026). 28px is the narrowest gap that still
+     separates them at this type size. */
+  th, td { text-align:right; padding-left:28px }
+  th:first-child, td:first-child { text-align:left; padding-left:0; padding-right:28px }
   th { font-size:8px; letter-spacing:.16em; text-transform:uppercase; color:var(--mute);
-       font-weight:500; text-align:right; padding-bottom:11px; border-bottom:1px solid var(--navy) }
-  th:first-child { text-align:left }
-  td { padding:16px 0; border-bottom:1px solid var(--rule); text-align:right;
+       font-weight:500; padding-bottom:11px; border-bottom:1px solid var(--navy) }
+  td { padding-top:15px; padding-bottom:15px; border-bottom:1px solid var(--rule);
        vertical-align:top }
-  td:first-child { text-align:left; padding-right:16px }
-  .desc { font-family:'EB Garamond',serif; font-size:16px; color:var(--midnight) }
+  .desc { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight) }
   .descsub { font-size:9.5px; color:var(--mute); margin-top:3px }
-  .num { font-family:'EB Garamond',serif; font-size:16px; color:var(--midnight) }
+  .num { font-family:'EB Garamond',Georgia,sans-serif; font-size:16px; color:var(--midnight) }
   /* The manual sentence is 60 characters in a numeric column. Balanced wrapping
      keeps it as even lines rather than one long line and one orphan word. */
   .prompt { font-size:9.5px; line-height:1.65; color:var(--mute); text-align:right;
             text-wrap:balance }
   .estimate { margin-top:32px; display:flex; align-items:flex-end; justify-content:space-between; gap:40px }
-  .estimate .title { font-family:'EB Garamond',serif; font-size:18px; color:var(--midnight) }
+  .estimate .title { font-family:'EB Garamond',Georgia,sans-serif; font-size:18px; color:var(--midnight) }
   .figs { display:flex; gap:56px; text-align:right }
-  .big { font-family:'EB Garamond',serif; font-size:26px; color:var(--midnight); margin-top:5px; line-height:1 }
+  .big { font-family:'EB Garamond',Georgia,sans-serif; font-size:26px; color:var(--midnight); margin-top:5px; line-height:1 }
   .spacer { flex:1; min-height:28px }
   footer { font-size:7.5px; line-height:1.75; color:var(--mute); padding-top:18px;
            border-top:1px solid var(--rule); display:flex; justify-content:space-between; gap:30px }
@@ -281,8 +294,8 @@ function sheet(quote) {
 
   <table>
     <thead><tr>
-      <th style="width:42%">Item</th><th style="width:16%">Weight (grams)</th>
-      <th style="width:12%">Quantity</th><th style="width:30%">Total</th>
+      <th style="width:38%">Item</th><th style="width:18%">Weight (grams)</th>
+      <th style="width:14%">Quantity</th><th style="width:30%">Total</th>
     </tr></thead>
     <tbody>${quote.items.map(itemRow).join("")}</tbody>
   </table>
