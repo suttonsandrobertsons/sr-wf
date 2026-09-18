@@ -7,7 +7,10 @@ node_modules/
 .pnpm-store/
 .DS_Store
 
-# Local working files, not part of the repo
+# Local working files, not part of the repo. /local/ is the standing boundary:
+# anything that is not shipped JS goes in there and nothing inside can leak.
+# See ../../README.md. The named directories below predate it.
+/local/
 dev/
 outputs/
 test-output/
