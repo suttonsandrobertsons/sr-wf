@@ -16,6 +16,7 @@ const TWO_ITEMS = {
   gold_item_1_weight_grams: "15",
   gold_item_1_quantity: "1",
   gold_item_1_amount: "855",
+  gold_item_1_loan_value: "760",
   gold_item_1_manual: "false",
   bullion_name_2: "Gold Sovereign",
   gold_item_2_label: "Gold Sovereign",
@@ -23,6 +24,7 @@ const TWO_ITEMS = {
   gold_item_2_weight_grams: "7.99",
   gold_item_2_quantity: "1",
   gold_item_2_amount: "1556",
+  gold_item_2_loan_value: "1400",
   gold_item_2_manual: "false",
   bullion_name_3: "",
 };
@@ -64,7 +66,7 @@ beforeEach(() => { document.body.innerHTML = ""; });
 
 describe("readQuote", () => {
   it("reads the items from the hidden fields, formatted as the page formats them", () => {
-    expect(readQuote(buildForm(TWO_ITEMS)).i).toEqual([
+    expect(readQuote(buildForm(TWO_ITEMS, { enquiry: "Sell My Items" })).i).toEqual([
       ["18ct", "Jewellery", "15", "1", "£855"],
       ["Gold Sovereign", "Coin", "7.99", "1", "£1,556"],
     ]);
@@ -92,6 +94,13 @@ describe("readQuote", () => {
     expect(readQuote(buildForm(TWO_ITEMS, { enquiry })).e).toBe(enquiry);
   });
 
+  it("shows each item's loan value when the panel shows the loan amount alone, so rows add up", () => {
+    const panelLoanOnly = buildForm(TWO_ITEMS, { enquiry: "Loan" });
+    expect(readQuote(panelLoanOnly).i.map((row) => row[4])).toEqual(["£760", "£1,400"]);
+    const panelBoth = buildForm(TWO_ITEMS, { enquiry: "Sell My Items" });
+    expect(readQuote(panelBoth).i.map((row) => row[4])).toEqual(["£855", "£1,556"]);
+  });
+
   it("encodes to base64url that decodes back to the same figures, £ included", () => {
     const quote = readQuote(buildForm(TWO_ITEMS));
     const d = encodeQuote(quote);
@@ -113,7 +122,7 @@ describe("the link and the submit", () => {
   const submit = (form) => form.dispatchEvent(new CustomEvent("suttons:form-submit", { bubbles: true }));
   const hidden = (form) => form.querySelector('[name="quote_pdf_url"]')?.value;
 
-  it("points the link at the figures on screen when clicked, in a new tab, with no reference", () => {
+  it("points the link at the figures on screen when clicked, with no reference", () => {
     const form = buildForm(TWO_ITEMS);
     const link = form.querySelector("[data-form-gold-quote-link]");
     link.addEventListener("click", (e) => e.preventDefault());
@@ -122,7 +131,13 @@ describe("the link and the submit", () => {
     expect(`${url.origin}${url.pathname}`).toBe(`${WORKER}/quote`);
     expect(decode(url.searchParams.get("d"))).toEqual(readQuote(form));
     expect(link.href).not.toContain("BURGE");
-    expect(link.target).toBe("_blank");
+  });
+
+  it.each(["pointerdown", "contextmenu", "focusin"])("sets the address on %s too, so right-click and long-press open the PDF", (type) => {
+    const form = buildForm(TWO_ITEMS);
+    const link = form.querySelector("[data-form-gold-quote-link]");
+    link.dispatchEvent(new Event(type, { bubbles: true }));
+    expect(link.getAttribute("href")).toMatch(new RegExp(`^${WORKER}/quote\\?d=`));
   });
 
   it("sends the Zoho link and beacons the same figures at submit, without waiting", () => {

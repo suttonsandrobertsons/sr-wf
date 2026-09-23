@@ -3,8 +3,9 @@
 // The PDF is made by the suttons-quote Worker (private repo, quote/). This file
 // only gathers what the page shows into one string, `d`, and hands it over:
 //
-//   on click   the link opens WORKER/quote?d=... in a new tab. No reference: the
-//              customer can download from step 1, before any enquiry exists.
+//   on click   the link opens WORKER/quote?d=... in a new tab (a Designer
+//              setting). No reference: the customer can download from step 1,
+//              before any enquiry exists.
 //   on submit  a beacon stores d under the lead reference, and the hidden field
 //              quote_pdf_url carries WORKER/quote/<reference> to Zapier, so the
 //              Zoho lead links to the same sheet. Nothing waits: the link is
@@ -17,7 +18,7 @@
 // chosen: price of your gold today) decide the sheet too. Nothing is priced here.
 //
 // Link visibility is Designer-only: show-if "gold_purchase_total > 0" on the
-// link, so it appears once an item is priced. The Price estimate panel is
+// link's wrapper, so it appears once an item is priced. The Price estimate panel is
 // already hidden on the Describe items route, so the link is too.
 
 import { formConfig } from "./config.js";
@@ -28,8 +29,6 @@ import { formatMoney } from "./numbers.js";
 
 const LINK = "[data-form-gold-quote-link]";
 const PANEL = "[data-form-gold-section-price]";
-// The estimate outputs the Worker has labels for (quote/src/data.js TOTALS).
-const TOTALS = new Set(["indicative_value", "purchase_total", "loan_total"]);
 
 function field(root, name) {
   return String(root.querySelector(`[name="${name}"]`)?.value || "").trim();
@@ -44,7 +43,11 @@ function money(value) {
 
 // Priced slots, in order. gold.js writes bullion_name_N for every slot it
 // priced and blanks the rest, so it doubles as the presence test.
-function items(root) {
+//
+// Each row's total is the page's own per-item figure (gold_item_N_amount), except
+// where the panel shows the loan amount alone: then the rows show each item's
+// loan value, so they add up to the figure beneath them.
+function items(root, loanOnly) {
   return Array.from(root.querySelectorAll('[name^="bullion_name_"]'))
     .filter((input) => input.value.trim())
     .map((input) => Number(input.name.slice("bullion_name_".length)))
@@ -57,13 +60,13 @@ function items(root) {
       field(root, `gold_item_${n}_quantity`),
       field(root, `gold_item_${n}_manual`) === "true"
         ? MANUAL_QUOTE_PROMPT
-        : money(field(root, `gold_item_${n}_amount`)),
+        : money(field(root, `gold_item_${n}_${loanOnly ? "loan_value" : "amount"}`)),
     ]);
 }
 
 function totals(root) {
   return Array.from(root.querySelectorAll(`${PANEL} [data-form-gold-output]`))
-    .filter((el) => TOTALS.has(el.getAttribute("data-form-gold-output")) && !formDom.isConditionHidden(el))
+    .filter((el) => !formDom.isConditionHidden(el))
     .map((el) => [el.getAttribute("data-form-gold-output"), el.textContent.trim()]);
 }
 
@@ -73,7 +76,9 @@ function enquiry(root) {
 }
 
 export function readQuote(root) {
-  return { e: enquiry(root), i: items(root), t: totals(root) };
+  const t = totals(root);
+  const loanOnly = t.length === 1 && t[0][0] === "loan_total";
+  return { e: enquiry(root), i: items(root, loanOnly), t };
 }
 
 // base64url of the UTF-8 JSON: the figures carry "£".
@@ -87,16 +92,16 @@ const worker = () => formConfig.quote.workerBase;
 export function initQuoteSheet() {
   if (typeof document === "undefined") return;
 
-  // Set the address at the moment of the click, so it is always the figures
-  // on screen; the browser then follows the link as normal.
-  document.addEventListener("click", (event) => {
+  // Set the address the moment the link is reached, so it is always the
+  // figures on screen. pointerdown and contextmenu come before a middle-click,
+  // right-click "open in new tab" or a long-press; focusin before Enter.
+  const point = (event) => {
     const link = event.target.closest?.(LINK);
     const root = link?.closest("form");
     if (!root) return;
-    link.target = "_blank";
-    link.rel = "noopener";
     link.href = `${worker()}/quote?d=${encodeQuote(readQuote(root))}`;
-  }, true);
+  };
+  ["pointerdown", "contextmenu", "focusin", "click"].forEach((type) => document.addEventListener(type, point, true));
 
   // Fired inside the form's capture-phase submit handler, after the lead
   // reference is set and before Webflow reads the fields (core/events.js).
@@ -109,7 +114,7 @@ export function initQuoteSheet() {
       formValues.setHidden(root, "quote_pdf_url", "");
       return;
     }
-    const url = `${worker()}/quote/${encodeURIComponent(reference)}`;
+    const url = `${worker()}/quote/${reference}`;
     formValues.setHidden(root, "quote_pdf_url", url);
     navigator.sendBeacon?.(url, encodeQuote(quote));
   });
