@@ -830,13 +830,13 @@ function getItemPrompt(itemElement) {
 
   if (!itemType) return "Choose gold type to continue";
   if (itemType === "jewellery") {
-    if (!metalType) return "Choose carat to continue";
+    if (!metalType) return "Select carat";
     const weight = parseNumber(item.weightGrams);
     if (!Number.isFinite(weight) || weight <= 0) return "Enter weight to continue";
     return "";
   }
   if (itemType === "coin" || itemType === "bar") {
-    if (!bullionName) return `Choose ${itemType} type to continue`;
+    if (!bullionName) return `Select ${itemType}`;
     if (bullionName === "other" || bullionName === "unsure") return MANUAL_QUOTE_PROMPT;
     return "";
   }

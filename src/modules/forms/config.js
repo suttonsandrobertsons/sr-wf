@@ -175,6 +175,12 @@ export const formConfig = {
     unsubmittedNamePrefix: '_disabled_',
   },
 
+  // Price estimate PDF (quote-sheet.js). A separate Worker from uploads: see
+  // quote/ in the private repo.
+  quote: {
+    workerBase: 'https://suttons-quote.silent-breeze-25c2.workers.dev',
+  },
+
   gold: {
     priceEndpoint: '/gold/price',
     trendEndpoint: '/gold/trend',
