@@ -9,6 +9,7 @@ describe("Splide autoscroll", () => {
 	let createdInstances;
 	let currentIsOverflow;
 	let pauseAutoScrollBeforeReady;
+	let overflowBeforeMounted;
 	let marqueeSlideWidth;
 	let marqueeContainerWidth;
 	let originalGetBoundingClientRect;
@@ -24,6 +25,7 @@ describe("Splide autoscroll", () => {
 		mobileMatches = false;
 		currentIsOverflow = false;
 		pauseAutoScrollBeforeReady = false;
+		overflowBeforeMounted = false;
 		// null disables the marquee measurements entirely, so tests that do not
 		// care about expansion behave exactly as they did before.
 		marqueeSlideWidth = null;
@@ -82,6 +84,10 @@ describe("Splide autoscroll", () => {
 					AutoScroll: {
 						isPaused: vi.fn(() => this._autoScrollPaused),
 						play: vi.fn(() => {
+							// The extension's interval does not exist before it mounts.
+							if (overflowBeforeMounted && !this._mounted) {
+								throw new TypeError("Cannot read properties of undefined (reading 'start')");
+							}
 							this._autoScrollPaused = false;
 						}),
 						pause: vi.fn(() => {
@@ -101,6 +107,9 @@ describe("Splide autoscroll", () => {
 
 			mount(extensions) {
 				this.mountedExtensions = extensions;
+				// Real Splide lays out, and reports overflow, before extensions mount.
+				if (overflowBeforeMounted) this.trigger("overflow", currentIsOverflow);
+				this._mounted = true;
 				this._events.get("mounted")?.forEach((callback) => callback());
 
 				if (pauseAutoScrollBeforeReady) {
@@ -310,6 +319,17 @@ describe("Splide autoscroll", () => {
 
 		expect(refresh).not.toHaveBeenCalled();
 		expect(instance.splide.Components.AutoScroll.pause).toHaveBeenCalledTimes(1);
+	});
+
+	it("leaves AutoScroll alone until it has mounted", () => {
+		currentIsOverflow = true;
+		overflowBeforeMounted = true;
+		const root = buildCarousel({ autoScroll: "false", autoScrollMobile: "true" });
+		mobileMatches = true;
+
+		const instance = createCarousel(root);
+
+		expect(instance.splide.Components.AutoScroll.isPaused()).toBe(false);
 	});
 
 	it("restarts an overflowing carousel if initialization pauses it before ready", () => {

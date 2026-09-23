@@ -753,6 +753,7 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 	let isCenterSlideLoopRunning = false;
 	let isDestroyed = false;
 	let hasActiveLayout = false;
+	let isMounted = false;
 
 	function requestCenterSlideUpdate() {
 		if (!shouldUpdateCenterSlide(effectiveSettings)) {
@@ -899,6 +900,7 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 
 	// Setup Splide event listeners
 	splide.on("mounted", () => {
+		isMounted = true;
 		expandMarqueeIfNeeded();
 		hasActiveLayout ||= getSplideActiveState(splide);
 		updateSplideState(splide, root, effectiveSettings);
@@ -940,7 +942,10 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		hasActiveLayout ||= isOverflow;
 		updateSplideDragForOverflow(splide, effectiveSettings, isOverflow);
 		updateSplideState(splide, root, effectiveSettings, isOverflow);
-		syncSplideAutoScrollForOverflow(splide, effectiveSettings, isOverflow);
+		// Splide reports overflow while its core is still mounting, before the
+		// AutoScroll extension has mounted; its play() throws then. "mounted"
+		// syncs the state once the extension is ready.
+		if (isMounted) syncSplideAutoScrollForOverflow(splide, effectiveSettings, isOverflow);
 		requestCenterSlideUpdate();
 		pressLayoutCollision.scheduleUpdate();
 	});
