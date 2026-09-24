@@ -6,8 +6,8 @@ import { MANUAL_QUOTE_PROMPT } from "../gold.js";
 
 const WORKER = formConfig.quote.workerBase;
 
-// A priced jewellery item plus a Sovereign, at the figures the live calculator
-// produces (verified against the site on 9 Sep 2026 at £104.40 spot).
+// A priced jewellery item plus a Sovereign, at the figures the calculator
+// produced on the site on 9 Sep 2026 at £104.40 spot.
 const TWO_ITEMS = {
   lead_reference: "BURGE-R625-FPWN",
   bullion_name_1: "18ct Gold Jewellery",
@@ -29,8 +29,8 @@ const TWO_ITEMS = {
   bullion_name_3: "",
 };
 
-// The live Price estimate panel's three outputs and their show-if wrappers
-// (Gold Form component, read with sideman on 23 Sep 2026).
+// The Price estimate panel's three outputs and their show-if wrappers, as in
+// the Gold Form component on 23 Sep 2026.
 const PANEL = `
   <div data-form-gold-section-price="true">
     <div data-form-show-if="enquiry_type =" data-form-state="__NOANSWER__">
@@ -45,7 +45,7 @@ function buildForm(fields, { enquiry = "Loan", key = "gold" } = {}) {
   const hide = (shown) => (shown ? "" : "condition-hidden");
   const form = document.createElement("form");
   form.setAttribute("data-form", key);
-  // The live enquiry question: a radio group, Loan first.
+  // The enquiry question as on the site: a radio group, Loan first.
   const radios = ["Loan", "Sell My Items"]
     .map((v) => `<input type="radio" name="enquiry_type" value="${v}"${v === enquiry ? " checked" : ""}>`)
     .join("");

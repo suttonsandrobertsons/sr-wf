@@ -1,15 +1,13 @@
 // What Webflow submits. Use this in tests, not new FormData(form).
 //
 // FormData omits disabled controls. Webflow's serialiser does not: its selector
-// has no :not(:disabled), and jQuery .val() reads disabled elements. Measured
-// on /get-a-quote mid-flow, FormData saw 30 keys and Webflow saw 49. The extra
-// 19 were stale answers from abandoned branches. They all reach Zapier; only
-// the ones a Zap maps reach Zoho.
+// has no :not(:disabled), and jQuery .val() reads disabled elements. On
+// /get-a-quote mid-flow that meant 49 keys, not 30, the extra ones being
+// answers from branches the customer left. All reach Zapier; only those a Zap
+// maps reach Zoho.
 //
-// This is a MIRROR. The authority is the private repo port at
-// tools/twins/webflow/serialise.js, which is diffed against the runtime source.
-// It is not imported here because this repo is public and must test standalone.
-// If the two disagree, the port wins.
+// A standalone copy of a reference serialiser kept outside this repo, so these
+// tests run on their own. If the two disagree, the reference wins.
 
 const SKIPPED_TYPES = new Set(["submit", "file", "button"]);
 

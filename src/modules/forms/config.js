@@ -155,28 +155,19 @@ export const formConfig = {
   },
 
   submit: {
-    // Same-named hidden inputs, each gated by show-if, where exactly one
-    // should submit; without dedup, Zapier/Zoho would pick the wrong one.
-    // See core/fields.js prepareChooseOneControls.
-    // Names authored as SEVERAL controls in the Designer that must collapse to
-    // one submitted value. The losers are RENAMED to unsubmittedNamePrefix, which
-    // is the only thing that removes a key from Webflow's payload — disabling a
-    // control does not (see core/app.js).
+    // Names authored as several controls in the Designer (each gated by
+    // show-if) that must submit as one value, or Zapier/Zoho may read the
+    // wrong one. The others are renamed with unsubmittedNamePrefix, the only
+    // way to drop a key from Webflow's payload; disabling a control does not.
+    // See core/fields.js prepareChooseOneControls and core/app.js.
     //
-    // `New_Lead_Type` was removed on 9 Sep 2026, and box_and_papers,
-    // meeting_venue and appointment_length with it. All four are decided in
-    // submit-values/ now. New_Lead_Type in particular is authored in no page's
-    // markup — a live grep of all six lead pages finds no control of that name
-    // — so it had nothing to dedup, and while it stayed in this list a render
-    // pass between two applies could rename the rule's OWN hidden. It cannot
-    // go back to markup either: the dedup submits exactly one control and this
-    // value accumulates.
+    // Values decided in submit-values/ (e.g. New_Lead_Type) must not be
+    // listed here: the dedup could rename the hidden input they write to.
     chooseOneFieldNames: ['bullion_name'],
     unsubmittedNamePrefix: '_disabled_',
   },
 
-  // Price estimate PDF (quote-sheet.js). A separate Worker from uploads: see
-  // quote/ in the private repo.
+  // Price estimate PDF (quote-sheet.js). A separate Worker from uploads.
   quote: {
     workerBase: 'https://suttons-quote.silent-breeze-25c2.workers.dev',
   },
@@ -187,22 +178,17 @@ export const formConfig = {
     currency: 'GBP',
     ouncesPerTroy: 31.1034768,
     purchaseToValuePercent: 88,
-    // Per-item-type purchase rate override, whole percent, applied instead of
-    // purchaseToValuePercent above (see gold.js getOfferRatio). Jewellery only
-    // (869eu8kr1, Sam 25 Aug: "for jewellery only the 88% to 86%, coins and
-    // bars to remain at 88%"). PURCHASES ONLY — loans use loanToValuePercent
-    // for every item type, so adding a key here never moves a loan offer.
-    // An absent, blank or non-numeric entry falls back to the 88 above.
+    // Per-item-type purchase rate, whole percent, used instead of
+    // purchaseToValuePercent (see gold.js getOfferRatio). Jewellery 86; coins
+    // and bars use the 88 above. Purchases only: loans always use
+    // loanToValuePercent.
     purchaseToValuePercentByItemType: {
       jewellery: 86,
     },
     loanToValuePercent: 75,
-    // Reduces live spot by this percent before purchase/loan ratios apply
-    // (see gold.js getSpotOfferMultiplier). Set to 0 to disable.
-    // This is the "top line" discount, spot price to working price (Sam,
-    // 21 Jul: "take 2% off the spot price BEFORE applying the discounting
-    // below" to purchases and loans). It therefore reduces loan offers as
-    // well as purchases, by design. 2 -> 3 on 9 Sep 2026 (869eu8kr1).
+    // Reduces live spot by this percent before the purchase and loan ratios
+    // apply, so it lowers both offers (see gold.js getSpotOfferMultiplier).
+    // 0 disables it.
     spotDiscountPercent: 3,
     loanTermMonths: 6,
     rateBands: LOAN_RATE_BANDS,
@@ -239,8 +225,7 @@ export const formConfig = {
     placesApiBase: 'https://places.googleapis.com/v1',
     ukOnly: true,
 
-    // Demo mode: no API key needed. Generates fake suggestions and address
-    // data. Set to false once a real googlePlacesApiKey is configured.
+    // Demo mode: fake suggestions and address data, no API key needed.
     demo: false,
   },
 };
@@ -422,9 +407,8 @@ export const fieldFilters = {
 export const fieldValidators = {
   email(value) {
     if (/[<>]/.test(value)) return false;
-    // Domain must be dot-separated labels with a real TLD: no leading or
-    // trailing dot, no consecutive dots. The old [^\s@]+ let "x@y.com."
-    // through, which Zoho then rejected. Local part still allows internal dots.
+    // Domain must be dot-separated labels with no leading, trailing or
+    // consecutive dots: Zoho rejects "x@y.com.". The local part may contain dots.
     return /^[^\s@]+@[^\s@.]+(?:\.[^\s@.]+)+$/.test(String(value).trim());
   },
   phone(value) {

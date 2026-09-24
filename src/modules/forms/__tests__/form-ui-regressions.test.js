@@ -15,7 +15,7 @@ function formPayload(form) {
   return submittedEntries(form.root)
 }
 
-describe('form UI regressions', () => {
+describe('form UI behaviour', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     formSuccessPage.hasScrolled = false
@@ -308,8 +308,8 @@ describe('form UI regressions', () => {
     expect(formPayload(form)).toContainEqual(['contact_method', 'Phone'])
   })
 
-  // Uses bullion_name because it is the only field still on the choose-one
-  // path. box_and_papers moved to submit-values/business-rules.js on 9 Sep 2026.
+  // bullion_name is the only field still on the choose-one path;
+  // box_and_papers is set by submit-values/business-rules.js.
   it('keeps only active branch values in the submit payload', () => {
     document.body.innerHTML = `
       <form data-form="quote">
@@ -344,18 +344,12 @@ describe('form UI regressions', () => {
   })
 
   it('renames EVERY control of a choose-one group when they are on a step the customer has left', () => {
-    // The trap, recorded so it is not proposed as a fix a second time.
-    //
-    // prepareChooseOneControls picks the active control with
-    // !isStepHidden(control) (core/fields.js). On a multi-step form the
-    // customer submits from the LAST step, so a group living on an earlier step
-    // has no active member and every one of them is renamed _disabled_*.
-    //
-    // This is why data-form-submit-single must NOT be used to fix the
-    // get-a-quote brand fields: they sit on step 2 and submit happens on step
-    // 4, so Brand would arrive EMPTY on every lead rather than merely wrong.
-    // Use the [data-form-field-group] aggregate instead, which reads only
-    // non-hidden controls and is already in the payload as `brands`.
+    // prepareChooseOneControls treats step-hidden controls as inactive
+    // (core/fields.js). Submit happens on the last step, so a group on an
+    // earlier step has no active member and every control is renamed
+    // _disabled_*. That is why the get-a-quote brand fields (step 2) use the
+    // [data-form-field-group] aggregate, sent as `brands`, rather than
+    // data-form-submit-single.
     document.body.innerHTML = `
       <form data-form="multi">
         <div data-form-step>
@@ -386,14 +380,13 @@ describe('form UI regressions', () => {
       return Object.fromEntries(formPayload(form))
     }
 
-    // While the customer is ON step 1 the mechanism works as advertised: the
-    // first readable control wins and keeps its name. This half is asserted so
-    // the test below cannot pass just because nothing was grouped at all.
+    // On step 1 the first readable control keeps its name. Asserted so the
+    // next half cannot pass just because nothing was grouped.
     const onBrandStep = onStep(0)
     expect(onBrandStep.watch_brand).toBe('Rolex')
     expect(onBrandStep._disabled_jewellery_brand).toBe('Cartier')
 
-    // At submit the customer is on the last step, and now NOTHING wins.
+    // At submit the customer is on the last step, and no control wins.
     const atSubmit = onStep(form.steps.length - 1)
     expect(atSubmit.watch_brand).toBeUndefined()
     expect(atSubmit.jewellery_brand).toBeUndefined()
@@ -401,14 +394,10 @@ describe('form UI regressions', () => {
     expect(atSubmit._disabled_jewellery_brand).toBe('Cartier')
   })
 
-  // Was a choose-one test over four same-named hidden inputs. box_and_papers is
-  // now a business rule, so this asserts the rule wins even when a same-named
-  // Designer input is present. Those inputs were deleted on 10 Sep 2026; this
-  // keeps the guarantee that re-adding one cannot beat the rule.
-  //
-  // Radios because that is what the live forms use. (formValues.get reads
-  // type="hidden" too — an earlier version of this comment claimed otherwise.)
-  it('computes box_and_papers and overrides the legacy Designer inputs', () => {
+  // box_and_papers is a business rule. The same-named Designer inputs are no
+  // longer on the pages; this checks that re-adding one cannot beat the rule.
+  // Radios, as on the real forms.
+  it('computes box_and_papers and overrides same-named Designer inputs', () => {
     document.body.innerHTML = `
       <form data-form="quote">
         <input type="radio" name="original_box" value="yes" checked>
@@ -419,14 +408,13 @@ describe('form UI regressions', () => {
     `
 
     const form = bootForm(document.querySelector('form'))
-    // Business rules run at SUBMIT, not on render — events.js calls
-    // formSubmitValues.apply() there. The old choose-one dedup ran on both,
-    // which is why this test used to need no explicit call.
+    // Business rules run at submit, not on render (events.js calls
+    // formSubmitValues.apply()), so the test calls it directly.
     formSubmitValues.apply(form.root)
     const payload = Object.fromEntries(formPayload(form))
 
     expect(payload.box_and_papers).toBe('Original Box and Papers')
-    // The leftovers are renamed out of the way, exactly as before.
+    // The Designer inputs are renamed out of the way.
     expect(payload._disabled_box_and_papers).toBeDefined()
   })
 
@@ -628,12 +616,9 @@ describe('form UI regressions', () => {
     ])
   })
 
-  // RENAMED 9 Sep 2026. This used to claim condition-hidden fields "are not
-  // submitted", asserted with new FormData(form) — which omits disabled controls
-  // and so agreed. Webflow's own serialiser has no :not(:disabled) and submits
-  // them anyway, so the claim was false in production. What the bundle actually
-  // does is DISABLE them, which stops native constraint validation focusing an
-  // invisible field but does not remove the key. Only renaming removes a key.
+  // Webflow's serialiser submits disabled controls (new FormData(form) would
+  // not, so it is not used here). Disabling stops native validation focusing
+  // an invisible field but does not remove the key; only renaming does.
   it('disables condition-hidden fields, which does NOT keep them out of the payload', () => {
     document.body.innerHTML = `
       <form data-form="quote">
@@ -656,10 +641,8 @@ describe('form UI regressions', () => {
     expect(deadHidden.disabled).toBe(true)
     expect(deadText.disabled).toBe(true)
 
-    // The consequence, asserted so it cannot be forgotten again: both dead
-    // fields still reach Zapier, carrying answers from a branch the customer
-    // abandoned. Nothing clears a hidden branch's values — formFields.clear()
-    // resets the whole form, not one branch.
+    // Both hidden fields still reach Zapier with answers from the branch the
+    // customer left. formFields.clear() resets the whole form, not one branch.
     expect(formPayload(form)).toEqual([
       ['active_hidden', 'keep'],
       ['dead_hidden', 'drop-hidden'],
@@ -1142,10 +1125,9 @@ describe('form UI regressions', () => {
     window.history.replaceState({}, '', '/thank-you/get-a-quote?form=get-a-quote&Reference=JONES-123')
     formSuccessPage.hydrateOutputs(document)
 
-    // PII minimisation (documented in the developer docs of the private
-    // companion repo): reference hydrates; email, requested_amount and
-    // contact_method are no longer persisted, so their rows stay empty/hidden
-    // even when a page fabricates output hooks for them.
+    // Personal data is kept to a minimum: only the reference is stored.
+    // email, requested_amount and contact_method stay empty even when the
+    // page has output hooks for them.
     expect(document.querySelector('[data-form-success-output="reference"]').textContent).toBe('JONES-123')
     expect(document.querySelector('[data-form-success-output="email"]').textContent).toBe('')
     expect(document.querySelector('[data-form-success-field="email"]').hidden).toBe(true)

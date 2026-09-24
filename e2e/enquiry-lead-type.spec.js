@@ -4,12 +4,9 @@ import { installSubmitCapture, fillAndSubmit, LEAD_FORMS } from "./helpers/forms
 // New_Lead_Type is derived at submit time from enquiry_type plus the two
 // sell-only follow-ups (submit-values/business-rules.js).
 //
-// The combination matrix is driven through `courier` because it is the shortest
-// flow (2 steps, no uploads). get-a-quote deliberately runs only one case — its
-// step 4 requires two real image uploads to advance, and satisfying that would
-// mean POSTing files to the upload worker on every test run. The derived logic
-// is shared code, so covering every branch on one form plus a spot-check on the
-// others is the honest trade; the unit suite covers the branches in isolation.
+// The full matrix runs on `courier`, the shortest flow (2 steps, no uploads).
+// get-a-quote runs one structural case, because step 4 needs two real uploads.
+// The logic is shared; the unit suite covers each branch.
 
 const COMBINATIONS = [
   {
@@ -33,14 +30,14 @@ const COMBINATIONS = [
     expected: "SHP Customer, Consignment Customer",
   },
   {
-    // The case that would submit an EMPTY field without the SHP base value.
+    // Without the SHP base value this case would submit an empty field.
     name: "sell + neither still sends SHP Customer, never an empty field",
     answers: { enquiry_type: "Sell My Items", enquiry_consider_loan: "No", enquiry_consider_consignment: "No" },
     expected: "SHP Customer",
   },
 ];
 
-test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
+test.describe("New_Lead_Type derivation (published site, nothing submitted)", () => {
   for (const combo of COMBINATIONS) {
     test(combo.name, async ({ page }) => {
       const capture = await installSubmitCapture(page);
@@ -56,10 +53,9 @@ test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
     });
   }
 
-  // The derived input is created AFTER the single-submit dedup pass runs, so it
-  // must never be renamed with the _disabled_ prefix, and no second value may
-  // ride along under the same name.
-  test("submits exactly one New_Lead_Type and leaks no _disabled_ copy", async ({ page }) => {
+  // The derived input is created after the single-submit pass, so it is never
+  // renamed _disabled_ and no second value shares its name.
+  test("submits exactly one New_Lead_Type and no _disabled_ copy", async ({ page }) => {
     const capture = await installSubmitCapture(page);
     await page.goto("/courier-service");
     await fillAndSubmit(page, "courier", {
@@ -72,9 +68,8 @@ test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
     expect(Object.keys(fields).filter((k) => /_disabled_New_Lead_Type/.test(k))).toEqual([]);
   });
 
-  // Answers left checked from before the visitor switched to "Loan" are
-  // condition-hidden, so formValues.get skips them — a loan lead must never
-  // inherit them.
+  // Answers left checked before switching to "Loan" are condition-hidden, so
+  // formValues.get skips them.
   test("a loan enquiry ignores follow-up answers given before switching", async ({ page }) => {
     const capture = await installSubmitCapture(page);
     await page.goto("/courier-service");
@@ -95,7 +90,7 @@ test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
       await new Promise((r) => setTimeout(r, 600));
     });
 
-    // Still physically checked, but hidden — that's the trap this guards.
+    // Still checked, but hidden.
     const stale = await page.evaluate(() => [...document.querySelectorAll('[name="enquiry_consider_loan"]')]
       .filter((e) => e.checked).map((e) => e.value));
     expect(stale).toEqual(["Yes"]);
@@ -140,10 +135,9 @@ test.describe("New_Lead_Type derivation (live, nothing submitted)", () => {
       await new Promise((r) => setTimeout(r, 1600));
     });
 
-    // No enquiry_consider_consignment here: it was deleted from the gold
-    // calculator on 9 Sep 2026 (869eu8kr1). deriveNewLeadType reads it through
-    // formValues.get, so an absent field reads as not-yes and "Consignment
-    // Customer" drops out with no JS change — which is what this asserts.
+    // The gold calculator has no enquiry_consider_consignment (removed 9 Sep
+    // 2026). An absent field reads as not-yes, so "Consignment Customer" is
+    // not included.
     await fillAndSubmit(page, "gold", {
       enquiry_type: "Sell My Items", enquiry_consider_loan: "Yes",
     });

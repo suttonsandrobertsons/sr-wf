@@ -42,8 +42,8 @@ export const formApp = {
     this.pruneDisconnected();
     formSuccessPage.scrollToTopIfNeeded();
     formSuccessPage.hydrateOutputs(scope);
-    // form_submission push runs from the TY page, not pre-handoff: a native
-    // lead-form POST races page-unload and the pre-handoff push can be lost.
+    // form_submission push runs from the TY page, not before handoff: a native
+    // lead-form POST can unload the page before an earlier push is sent.
     // Must run after hydrateOutputs, while the snapshot still exists; it clears
     // the snapshot once pushed.
     formSuccessPage.trackSuccess(scope);
@@ -184,23 +184,18 @@ export const formApp = {
 import { setFormApp } from './lazy-app.js';
 setFormApp(formApp);
 
-// ============================================================================
-// DOCUMENT-LEVEL ATTRIBUTION FALLBACK
-// ============================================================================
-// Disabling does NOT remove a control from Webflow's payload. Its serialiser
+// Disabling does not remove a control from Webflow's payload: its serialiser
 // selects `:input:not([type="submit"]):not([type="file"]):not([type="button"])`
-// with no `:not(:disabled)`, and jQuery's `.val()` reads disabled elements — so
-// a disabled control is still submitted, with its value. Only RENAMING removes a
-// key, and only the names in submit.chooseOneFieldNames are renamed.
+// with no `:not(:disabled)`, and jQuery's `.val()` reads disabled elements.
+// Only renaming removes a key, and only the names in
+// submit.chooseOneFieldNames are renamed.
 //
-// What this does buy: the browser's own constraint validation skips a disabled
-// control, so a conditional `required` cannot block submit by trying to focus an
-// invisible field. That is the reason to keep it.
+// Disabling is still worth doing: the browser's constraint validation skips a
+// disabled control, so a conditional `required` cannot block submit by trying
+// to focus an invisible field.
 //
-// Verbatim serialiser: private repo local/webflow-runtime/serialiser.extract.js.
-// To assert what a form submits, use the private repo's port at
-// tools/twins/webflow/serialise.js — never new FormData(form), which omits
-// disabled controls and so under-reports.
+// To check what a form submits, do not use new FormData(form): it omits
+// disabled controls, which Webflow sends.
 (function initSubmitControlGuard() {
   if (typeof document === 'undefined') return;
 
@@ -214,6 +209,9 @@ setFormApp(formApp);
   }, true);
 })();
 
+// ============================================================================
+// DOCUMENT-LEVEL ATTRIBUTION FALLBACK
+// ============================================================================
 // Covers forms that lack data-form and were never initialised by formApp.boot().
 (function initAttributionFallback() {
   if (typeof document === 'undefined') return;

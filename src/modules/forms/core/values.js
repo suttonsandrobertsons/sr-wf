@@ -1,8 +1,5 @@
 // Reading a value off a control, and deciding whether to read it at all.
 //
-// Split out of fields.js on 10 Sep 2026: 7 of its 11 importers wanted only
-// this.
-//
 // shouldOmitControl is the rule that decides what reaches Zapier. Note it is
 // NOT the same rule as formFields.shouldSkipValidation, which also excludes
 // step-hidden and visually-hidden controls. A control on a step the customer
@@ -117,7 +114,3 @@ export const formValues = {
 
   parseMoney: parseNumber,
 };
-
-// ============================================================================
-// FILE UPLOADS SYSTEM
-// ============================================================================

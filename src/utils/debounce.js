@@ -1,8 +1,6 @@
 // Trailing-edge debounce with a cancel().
 //
-// nav.js and carousels/splide-press.js each have their own copy. They are
-// out of scope for the forms cleanup on 9 Sep 2026, but this is the one to
-// converge on.
+// nav.js and carousels/splide-press.js have their own copies; prefer this one.
 
 export function debounce(callback, delay = 120) {
   let timer = 0;

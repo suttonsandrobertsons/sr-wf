@@ -326,11 +326,6 @@ function updateSplideState(splide, root, settings, isOverflow) {
 	const carouselControls = qs(root, ".carousel-controls");
 	const paginationEl = carouselControls ? qs(carouselControls, settings.dotsSelector) : null;
 
-	// root.classList.toggle(settings.activeCarouselClass, isActive);
-	// root.classList.toggle(settings.inactiveCarouselClass, !isActive);
-	// root.setAttribute("data-splide-active", isActive ? "true" : "false");
-	// root.setAttribute("data-carousel-active", isActive ? "true" : "false");
-
 	if (paginationEl) {
 		const slides = splide.Components?.Slide?.getSlides() || [];
 		const shouldHide = !isActive || slides.length <= 1;
@@ -359,24 +354,14 @@ function updateSplideDragForOverflow(splide, settings, isOverflow) {
 	};
 }
 
-// A marquee needs more content than container, or it does not work at all.
+// A marquee needs more content than its container.
 //
-// Splide's isOverflow() is `sliderSize(true) > listSize()`, and sliderSize
-// measures only the *real* slides - Splide.length is Slides.getLength(true), so
-// loop clones are excluded. With ten brands the real track is ~2335px, so past
-// that width Splide reports "not overflowing" and two things follow:
-//
-//   1. autoscroll is paused by the gate below, and
-//   2. Controller.getEnd() collapses to 0 under `omitEnd`, because every index
-//      then resolves to the same position. Move.loop() wraps on
-//      `index > getEnd()`, so the wrap arithmetic degenerates.
-//
-// (2) is why simply forcing autoscroll to run is not a fix: the track
-// translates and never wraps, running away to -2^24 and taking the logos
-// off-screen. Adding clones cannot help either - they are not counted.
-//
-// So give it enough *real* slides to genuinely overflow. Splide's invariants
-// then hold at any width, exactly as they already do on a laptop.
+// Splide's isOverflow() measures only the real slides (loop clones are
+// excluded). With ten brands the real track is ~2335px, so on a wider screen
+// Splide reports "not overflowing": autoscroll pauses, and under `omitEnd`
+// Controller.getEnd() collapses to 0 so the loop never wraps. Forcing
+// autoscroll on would scroll the logos off-screen, and extra clones are not
+// counted, so this adds real slide copies until the track overflows.
 // Splide's own loop clones, which must never be treated as source material.
 const SPLIDE_CLONE_CLASS = "splide__slide--clone";
 // Slides have no width until their images have laid out. Expanding on a

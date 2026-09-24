@@ -6,9 +6,8 @@ import { test, expect } from "@playwright/test";
 //  - fulfilment-finder / product-finder → client-side card filtering only.
 //  - footer-form → newsletter; validation only, never submitted here.
 //
-// The handoff is where the enquiry change could bite silently: a value with no
-// matching option prefills nothing and the visitor just sees an unanswered
-// question, with no error anywhere.
+// A handed-over value with no matching option prefills nothing and shows no
+// error, so the handoff is checked directly.
 
 const setSelect = async (page, formKey, name, value) =>
   page.evaluate(({ formKey, name, value }) => {
@@ -21,7 +20,7 @@ const setSelect = async (page, formKey, name, value) =>
   }, { formKey, name, value });
 
 test.describe("home-hero → get-a-quote handoff", () => {
-  test("offers only the two live enquiry options", async ({ page }) => {
+  test("offers only the two current enquiry options", async ({ page }) => {
     await page.goto("/");
     const options = await page.evaluate(() => {
       const sel = document.querySelector('[data-form="home-hero"] [name="enquiry_type"]');

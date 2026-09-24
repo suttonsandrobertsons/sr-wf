@@ -56,11 +56,10 @@ async function fillJewelleryItem(page, enquiry, opts) {
   await fillJewellery(page, opts);
 }
 
-// What the page would actually submit, by Webflow's rules rather than
-// FormData's. FormData omits disabled controls; Webflow does not, and on this
-// form the difference is every condition-hidden per-slot field. Mirrors
-// src/modules/forms/__tests__/helpers/webflow-submit.js; the authority is the
-// port in the private repo at tools/twins/webflow/serialise.js.
+// What the page would submit, by Webflow's rules rather than FormData's.
+// FormData omits disabled controls; Webflow does not, which here means every
+// condition-hidden per-slot field. Mirrors
+// src/modules/forms/__tests__/helpers/webflow-submit.js.
 function readEmit(page) {
   return page.evaluate(() => {
     const root = document.querySelector('[data-form="gold"]');
@@ -98,7 +97,7 @@ async function pollForTotal(page, field) {
     .toMatch(/^[1-9]\d*$/);
 }
 
-test.describe("gold calculator (live)", () => {
+test.describe("gold calculator (published site)", () => {
   test("condition rules toggle field visibility (carat vs bullion)", async ({
     page,
   }) => {
@@ -119,9 +118,8 @@ test.describe("gold calculator (live)", () => {
     await expect(carat).toBeHidden();
   });
 
-  // "Other" is removed as an unsupported carat: it had no pricing row, so
-  // selecting it blocked Continue.
-  test('carat select no longer offers "Other"', async ({ page }) => {
+  // "Other" is not a carat option: it has no pricing row.
+  test('carat select does not offer "Other"', async ({ page }) => {
     await page.goto(GOLD_CALC);
     await setRadioByValue(page, "[data-form-gold-item]", "jewellery");
     const carat = page.locator('[name="gold_metal_type_1"]');
@@ -167,9 +165,8 @@ test.describe("gold calculator (live)", () => {
     await expect(page.locator(".form-gold_estimate-row").first()).toBeVisible();
   });
 
-  // Pricing intent: 2% spot discount before the 88% purchase / 75% loan ratios.
-  // Asserts a band (rounding-tolerant) that rejects the ratios reverting
-  // (e.g. discount removed → purchase/spot 0.88, or LTV back to 70% → 0.69).
+  // 3% spot discount before the purchase (86% jewellery) and 75% loan ratios.
+  // A rounding-tolerant band that fails if the discount or a ratio changes.
   test("purchase/loan sit at the discounted ratios vs raw spot", async ({
     page,
   }) => {
@@ -182,9 +179,6 @@ test.describe("gold calculator (live)", () => {
     const purchaseRatio = Number(e.gold_item_1_purchase_value) / spot;
     const loanRatio = Number(e.gold_item_1_loan_value) / spot;
     // Jewellery: 0.97 spot discount x 0.86 purchase rate = 0.8342.
-    // Was 0.98 x 0.88 = 0.8624 until 869eu8kr1 moved the discount to 3% and the
-    // jewellery purchase rate to 86%. This band was not updated with the rates,
-    // so the spec failed against the deployed bundle until 9 Sep 2026.
     expect(purchaseRatio).toBeGreaterThan(0.825);
     expect(purchaseRatio).toBeLessThan(0.845); // rejects 0.86 (no discount)
     // Loan keeps the flat 75%: 0.97 x 0.75 = 0.7275.
@@ -192,7 +186,7 @@ test.describe("gold calculator (live)", () => {
     expect(loanRatio).toBeLessThan(0.735); // rejects 0.75 (no discount)
   });
 
-  // Empty item slots emit blank amount/asset type — no phantom Zoho line items.
+  // Empty item slots emit blank amount/asset type, so Zoho gets no empty line items.
   test("unused item slots emit blank amount and asset type", async ({
     page,
   }) => {
@@ -232,10 +226,9 @@ test.describe("gold calculator (live)", () => {
     }, bullion);
   }
 
-  // Swiss/French Francs and Gold American Eagles
-  // carry a further 6% trim on the 88% purchase / 75% loan offers, set per
-  // pricing row in CMS (extra-discount). Effective ratios vs raw spot:
-  // purchase ≈ 0.98×0.88×0.94 = 0.810, loan ≈ 0.98×0.75×0.94 = 0.691.
+  // Swiss/French Francs and Gold American Eagles carry a further 6% on the 88%
+  // purchase / 75% loan offers, set per CMS pricing row (extra-discount).
+  // Against raw spot: purchase ≈ 0.97×0.88×0.94 = 0.802, loan ≈ 0.97×0.75×0.94 = 0.684.
   test("coin-group discount trims Francs/Eagles ~6% below the standard ratios", async ({
     page,
   }) => {
@@ -246,13 +239,13 @@ test.describe("gold calculator (live)", () => {
     const e = await readEmit(page);
     const spot = Number(e.gold_item_1_spot_value);
     expect(Number(e.gold_item_1_purchase_value) / spot).toBeGreaterThan(0.79);
-    expect(Number(e.gold_item_1_purchase_value) / spot).toBeLessThan(0.825); // rejects 0.86 (undiscounted)
+    expect(Number(e.gold_item_1_purchase_value) / spot).toBeLessThan(0.825); // rejects ~0.85 (no group discount)
     expect(Number(e.gold_item_1_loan_value) / spot).toBeGreaterThan(0.675);
-    expect(Number(e.gold_item_1_loan_value) / spot).toBeLessThan(0.705); // rejects 0.74 (undiscounted)
+    expect(Number(e.gold_item_1_loan_value) / spot).toBeLessThan(0.705); // rejects ~0.73 (no group discount)
   });
 
-  // Control: a non-flagged coin (Sovereign) stays at the standard discounted
-  // ratios — proving the trim is targeted, not global.
+  // Control: an unflagged coin (Sovereign) keeps the standard ratios, so the
+  // group discount is targeted.
   test("a non-flagged coin (Sovereign) keeps the standard ratios", async ({
     page,
   }) => {
@@ -262,9 +255,9 @@ test.describe("gold calculator (live)", () => {
 
     const e = await readEmit(page);
     const spot = Number(e.gold_item_1_spot_value);
-    expect(Number(e.gold_item_1_purchase_value) / spot).toBeGreaterThan(0.85); // ~0.86
+    expect(Number(e.gold_item_1_purchase_value) / spot).toBeGreaterThan(0.85); // ~0.854
     expect(Number(e.gold_item_1_purchase_value) / spot).toBeLessThan(0.875);
-    expect(Number(e.gold_item_1_loan_value) / spot).toBeGreaterThan(0.72); // ~0.74
+    expect(Number(e.gold_item_1_loan_value) / spot).toBeGreaterThan(0.72); // ~0.728
     expect(Number(e.gold_item_1_loan_value) / spot).toBeLessThan(0.745);
   });
 });

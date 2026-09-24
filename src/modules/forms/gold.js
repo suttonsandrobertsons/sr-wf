@@ -63,13 +63,10 @@ function getItemFieldValue(itemElement, name) {
   if (directValue) return directValue;
 
   // Prefer the control whose name carries this item's indexed prefix, else
-  // fall back to any readable control in the field's wrappers.
-  //
-  // The fallback works around prepareChooseOneControls (core/fields.js),
-  // which collapses controls sharing a chooseOneFieldNames base name (e.g.
-  // bullion_name) and renames all but one to `_disabled_bullion_name`. On a
-  // multi-item form this breaks item 2+'s indexed name match, producing a
-  // false "Choose the coin or bar." error and empty gold_item_N_* fields.
+  // any readable control in the field's wrappers. The fallback is needed
+  // because prepareChooseOneControls (core/fields.js) renames all but one
+  // control sharing a base name (e.g. bullion_name) to `_disabled_<name>`,
+  // so items 2+ may not match by indexed name.
   const readableControls = getFieldWrappers(itemElement, name)
     .flatMap((field) => Array.from(field.querySelectorAll("input, select, textarea")))
     .filter((control) => formValues.shouldReadField(control));
@@ -300,11 +297,9 @@ function getQuantity(item) {
 }
 
 function getOfferRatio(key, itemType) {
-  // Purchases can carry a per-item-type rate (config purchaseToValuePercentByItemType);
-  // jewellery is 86 while coins and bars stay on the 88 default. Loans never
-  // consult it, so a rate here cannot move a loan offer. A missing, blank or
-  // non-numeric entry falls through to the flat percentage below — never to 0
-  // (which would quote nothing) and never to 1 (which would quote full spot).
+  // Purchases use a per-item-type rate (config purchaseToValuePercentByItemType):
+  // jewellery 86, coins and bars 88. Loans ignore it. A missing or invalid
+  // entry falls through to the flat percentage below, never to 0 or 1.
   if (key === "purchase") {
     const byItemType = formConfig.gold.purchaseToValuePercentByItemType;
     const override = parseNumber(byItemType?.[normalizeSlug(itemType)]);
@@ -316,16 +311,15 @@ function getOfferRatio(key, itemType) {
   return Number.isFinite(number) && number > 0 ? number / 100 : NaN;
 }
 
-// The purchase rate is per item type since 869eu8kr1, so a lead mixing
-// jewellery with coins has no single rate. Reports the distinct CATEGORY rates
-// actually applied, ascending ("86", "88", or "86, 88").
+// The purchase rate is per item type, so a lead mixing jewellery with coins
+// has no single rate. Reports the distinct rates applied, ascending ("86",
+// "88", or "86, 88").
 //
-// Row-level extraDiscountPercent (Francs, American Eagles) is deliberately NOT
-// folded in: it belongs to the row rather than the rate, Sam reasons about the
-// two separately, and its effect is already visible in the per-item values.
+// Row-level extraDiscountPercent (e.g. Francs, American Eagles) is not folded
+// in: it belongs to the row, not the rate, and already shows in the per-item
+// values.
 //
-// Returns "" when nothing was priced — callers fall back to the flat config
-// value so the Describe Items route keeps reporting what it always has.
+// Returns "" when nothing was priced; callers then use the flat config value.
 function formatAppliedRatePercents(estimates, key) {
   const percents = [...new Set(
     estimates
@@ -337,10 +331,9 @@ function formatAppliedRatePercents(estimates, key) {
   return percents.join(", ");
 }
 
-// Spot discount multiplier (e.g. 0.98 for 2%), applied before the
-// purchase/loan ratios. Affects the purchase/loan OFFERS only — the
-// displayed spot value always uses the raw spot. Falls back to 1 if the
-// config is missing or invalid.
+// Spot discount multiplier (0.97 for the 3% discount), applied before the
+// purchase/loan ratios. Affects the offers only; the displayed spot value
+// uses the raw spot. 1 if the config is missing or invalid.
 function getSpotOfferMultiplier() {
   const percent = parseNumber(formConfig.gold.spotDiscountPercent);
   return Number.isFinite(percent) && percent > 0 && percent < 100 ? 1 - percent / 100 : 1;
@@ -704,8 +697,7 @@ function calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot = estim
   const spotTotal = estimates.reduce((sum, item) => sum + roundWholePound(item.spotValue), 0);
   const pricedEstimates = estimates.filter((item) => !item.manual);
   const manualCount = estimates.length - pricedEstimates.length;
-  // Rounding model (full detail: docs/developer/gold-calculator-maths.md).
-  // Every customer/Zoho amount is a whole £; every total is the SUM of its
+  // Every customer/Zoho amount is a whole £; every total is the sum of its
   // whole-£ line items, not a rounded sum. Per-item pricing keeps pence
   // internally.
   const purchaseTotal = pricedEstimates.reduce((sum, item) => sum + roundWholePound(item.purchaseValue), 0);
@@ -714,8 +706,7 @@ function calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot = estim
   // purchase, else the higher). Matches the per-item gold_item_N_amount calc.
   const indicativeValue = estimates.reduce((sum, item) => sum + roundWholePound(getDisplayValue(item, enquiryType)), 0);
 
-  // Falls back to the flat config percentage when no item was priced, so a
-  // Describe Items lead reports exactly what it did before this change.
+  // Flat config percentage when no item was priced (e.g. a Describe Items lead).
   const purchaseRatePercent = formatAppliedRatePercents(pricedEstimates, "purchase")
     || String(formConfig.gold.purchaseToValuePercent);
   const loanRatePercent = formatAppliedRatePercents(pricedEstimates, "loan")
@@ -766,20 +757,14 @@ function calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot = estim
 
 // Which figure the customer is shown, from what they said they want to do.
 //
-// enquiryType is normalizeSlug'd, so the live radio values arrive as "loan" and
-// "sell_my_items". Until 10 Sep 2026 this tested for "sell", which no live form
-// has ever submitted, so every sell lead fell through to the Math.max fallback.
-// That returned the right number by luck — the purchase rate (86-88%) is above
-// the loan rate (75%), so the max IS the purchase value — and it would have
-// started showing loan figures on sell leads the moment a rate crossed over.
-// The client has already floated changing the purchase rate.
+// enquiryType is normalizeSlug'd, so the live radio values arrive as "loan"
+// and "sell_my_items". Sell must be matched explicitly rather than relying on
+// the Math.max fallback, or a sell lead would show the loan figure if the
+// loan rate ever exceeded the purchase rate.
 //
-// "consign" is kept: consignment is gone from the gold calculator but the value
-// still exists on the other lead forms, and a consignment enquiry is priced as
-// a sale.
+// "consign" is priced as a sale; the value still exists on other lead forms.
 //
-// The fallback stays for an unanswered enquiry_type, where showing the better
-// of the two is the kindest honest answer.
+// An unanswered enquiry_type shows the higher of the two.
 function getDisplayValue(estimate, enquiryType) {
   if (enquiryType === "loan") return estimate.loanValue;
   if (enquiryType === "sell" || enquiryType === "sell_my_items" || enquiryType === "consign") {
@@ -999,8 +984,8 @@ function persistSummary(form, summary) {
   w("gold_is_above_max", String(summary.isAboveMax));
   w("gold_pricing_source", summary.source);
   w("gold_pricing_updated_at", summary.updatedAtLabel);
-  // Rates actually applied, not the flat config value: a jewellery lead now
-  // reports 86 rather than claiming 88. See formatAppliedRatePercents.
+  // Rates actually applied, not the flat config value (a jewellery lead
+  // reports 86). See formatAppliedRatePercents.
   w("gold_purchase_rate_percent", summary.purchaseRatePercent);
   w("gold_loan_rate_percent", summary.loanRatePercent);
   w("gold_manual_item_count", String(summary.manualCount));
@@ -1027,33 +1012,9 @@ function toItemTypeSubmitLabel(itemType) {
   return ITEM_TYPE_SUBMIT_LABELS[itemType] || itemType;
 }
 
-// The single combined per-item field the client asked for (10 Aug 2026 doc:
-// "combine this all into one single field"), matching their table exactly:
-//
-//   Jewellery  ->  "9ct Gold Jewellery"      (change requested)
-//   Coins      ->  "1/2 Oz Gold Krugerrand"  (their note: no change)
-//   Bars       ->  "1g Gold Bar"             (their note: no change)
-//
-// So coins and bars pass their CMS label through untouched and only jewellery
-// is composed, from the carat plus the item-type label.
-//
-// WHY THE FULL PHRASE, when an earlier version sent the bare "9ct Gold".
-// Item_N_Description composes as "<this> {qty} {gold_item_N_type}", so the
-// full phrase used to read "9ct Gold Jewellery 1 Jewellery". That was treated
-// as a reason the client could not have what they asked for, which was wrong:
-// the template is theirs and they are editing it anyway. The Zap draft drops
-// the trailing {{gold_item_N_type}}, so the description now reads
-// "9ct Gold Jewellery 1" and the field itself carries their exact string.
-//
-// This value is NOT what feeds Zoho's Metal picklist — that is
-// gold_item_N_metal_type, which must stay "9ct Gold" because it is a fixed
-// list and the longer phrase is not on it. The two fields differ on purpose.
-//
-// Falls back to the plain label whenever the carat cannot be read, so the
-// worst case is today's behaviour rather than an empty field.
-// The carat as Zoho's Item_N_Metal picklist spells it ("18ct Gold"). Empty for
-// coins and bars, which carry no carat. Falls back to the raw value if it is
-// not a readable carat, so nothing is lost.
+// The carat as Zoho's Item_N_Metal picklist spells it ("18ct Gold"); a bare
+// "18" matches no option. Coins and bars have no carat. Falls back to the raw
+// value if the carat cannot be read.
 function toItemMetal(item) {
   const raw = String(item?.metalType || "").trim();
   if (!raw || normalizeSlug(item?.itemType) !== "jewellery") return raw;
@@ -1062,6 +1023,16 @@ function toItemMetal(item) {
   return Number.isFinite(carats) && carats > 0 ? `${carats}ct Gold` : raw;
 }
 
+// One combined per-item description:
+//
+//   Jewellery  ->  "9ct Gold Jewellery"
+//   Coins      ->  "1/2 Oz Gold Krugerrand"  (CMS label as-is)
+//   Bars       ->  "1g Gold Bar"             (CMS label as-is)
+//
+// Only jewellery is composed, from the carat plus the item-type label. This is
+// not the value for Zoho's Metal picklist: that is gold_item_N_metal_type
+// ("9ct Gold"), a fixed list the longer phrase is not on. Falls back to the
+// plain label if the carat cannot be read.
 function toItemDescription(item) {
   const label = String(item?.label || "").trim();
   if (normalizeSlug(item?.itemType) !== "jewellery") return label;
@@ -1081,43 +1052,24 @@ function persistItemSlotFields(form, summary) {
     const item = summary.itemsBySlot[index - 1] || null;
 
     w(`gold_item_${index}_type`, toItemTypeSubmitLabel(item?.itemType));
-    // Zoho's Item_N_Metal picklist holds "9ct Gold" ... "24ct Gold"; the bare
-    // carat ("9") matches no option, which is why 16 Aug's lead stored an
-    // unusable value. Zoho accepts and keeps unlisted strings rather than
-    // rejecting them, so this was silently bad data, not a failed write.
+    // Zoho's Item_N_Metal picklist holds "9ct Gold" ... "24ct Gold". Zoho
+    // stores unlisted strings without error, so the format must match.
     w(`gold_item_${index}_metal_type`, toItemMetal(item));
     w(`gold_item_${index}_weight_grams`, item?.weightGrams);
     w(`gold_item_${index}_quantity`, item?.quantity);
     w(`gold_item_${index}_bullion_name`, item?.bullionName);
-    // Combined description, not the raw label — see toItemDescription.
-    //
-    // Both this and gold_item_${index}_metal_type are sent until the client
-    // publishes the Zap draft; then the duplicate goes in its own commit. An
-    // earlier comment here said metal_type "still carries the bare carat" —
-    // it does not, toItemMetal emits "18ct Gold". The bare carat is
-    // gold_metal_type_${index}, the raw repeater control.
+    // Combined description, not the raw label; see toItemDescription.
     w(`bullion_name_${index}`, item ? toItemDescription(item) : "");
-    // Zoho's Item_N_Bullion_Type is a 38-option COIN AND BAR list — jewellery
-    // has no valid value in it and never will. bullion_name_N now carries the
-    // description (jewellery included), so this field exists to feed Bullion
-    // Type alone: a valid option for coins and bars, empty for jewellery.
-    // Without it a jewellery lead stores an unlisted string there, which Zoho
-    // keeps but cannot group, filter or report on.
-    // Also empty for a MANUAL row, which is the one case that is arguably
-    // wrong. "Other", "Other Coins" and "Unsure" ARE valid Bullion Type
-    // options — an earlier comment here claimed they were not — so a manual
-    // coin or bar could send its synthesised label rather than nothing.
-    // Left as-is because no live bullion select currently offers an
-    // "Other"/"Unsure" choice, so the manual path is unreachable and
-    // gold_item_N_manual is always false. Revisit if that option returns.
+    // Feeds Zoho's Item_N_Bullion_Type, a coin-and-bar picklist: a valid
+    // option for coins and bars, empty for jewellery (no valid value) so Zoho
+    // can group and filter on it. Also empty for a manual row; "Other",
+    // "Other Coins" and "Unsure" are valid options, so send the label here if
+    // a bullion select ever offers Other/Unsure again.
     w(
       `gold_item_${index}_bullion_type`,
       item && !item.manual && normalizeSlug(item.itemType) !== "jewellery" ? item.label : "",
     );
-    // Duplicates gold_item_${index}_weight_grams above. No captured Zap maps
-    // this name — all five Item_N_Weight params read the other one — so it is
-    // a candidate for deletion, but not until the client's unpublished Zap
-    // draft is live and the fixtures are re-captured.
+    // Same value as gold_item_${index}_weight_grams, which Item_N_Weight reads.
     w(`weight_grams_${index}`, item?.weightGrams);
     w(`gold_item_${index}_label`, item?.label);
     // Whole £; Σ gold_item_N_purchase_value = gold_purchase_total (etc).
@@ -1127,13 +1079,9 @@ function persistItemSlotFields(form, summary) {
     // Same branch as summary indicativeValue (loan→loan, sell/consign→
     // purchase, else higher), via getDisplayValue. Empty for unused slots.
     w(`gold_item_${index}_amount`, item ? roundWholePound(getDisplayValue(item, summary.enquiryType)) : "");
-    // Literal "Gold" asset type. Slot 1 always sends it: the Describe Items
-    // route parses no priced items, so the old `item ? ...` gate wrote empty
-    // and the lead reached Zoho with no asset type at all (869eu8kr1 item 3,
-    // client's 10 Aug doc: "If the user submits 'Describe Items' tab instead,
-    // can 'Gold Item 1 Asset Type' be set to 'Gold' please, otherwise asset
-    // type isn't captured"). Slots 2-5 stay gated on slot presence, so an
-    // unused slot still cannot create a phantom Zoho item row.
+    // Slot 1 always sends "Gold" so a Describe Items lead (no priced items)
+    // still records an asset type. Slots 2-5 send it only when used, so an
+    // empty slot does not create a Zoho item row.
     w(`gold_item_${index}_asset_type`, item || index === 1 ? "Gold" : "");
     w(`gold_item_${index}_manual`, item ? item.manual : "");
   }
@@ -1229,15 +1177,10 @@ function syncRepeaterFieldNames(itemElement, index) {
 // rewrite. The authored value is stashed on `<attr>-authored` the first time a
 // row is synced, and each later sync re-derives from that stash.
 //
-// This has to be idempotent because addItem() clones the previous row, so item
-// 2 arrives already carrying item 1's expanded rule. Rewriting in place could
-// not fix it: expansion turns `bullion_name = other` into
-// `gold_bullion_name_1_coin = other OR gold_bullion_name_1_bar = other`, and
-// the pattern below requires an operator or delimiter directly after the
-// optional `_<digits>`, which the `_coin` / `_bar` suffix blocks. So items 2-5
-// silently kept pointing at item 1's selects: a customer whose SECOND item was
-// an unlisted coin or bar could never reveal its weight field, and
-// Item_N_Weight reached Zoho empty.
+// addItem() clones the previous row, so item 2 arrives carrying item 1's
+// expanded rule (`gold_bullion_name_1_coin = other OR ...`). The pattern below
+// cannot re-match past the `_coin` / `_bar` suffix, so rewriting in place
+// would leave items 2-5 pointing at item 1's controls.
 function authoredRule(element, attr) {
   const stash = `${attr}-authored`;
   const stashed = element.getAttribute(stash);

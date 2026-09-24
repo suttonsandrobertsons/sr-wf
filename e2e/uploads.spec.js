@@ -4,30 +4,19 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-// Uploads, driven through the real file picker.
+// Uploads, driven through the real file picker via Playwright's filechooser
+// event, so the tests follow the customer's path: formUploads.open(), the temp
+// input and its cleanup, focus/cancel detection and the in-progress guard.
 //
-// Replaces the sr.forms.injectUpload hook, deleted 9 Sep 2026. That hook shipped
-// to every live page and called formUploads.handle() directly, so it skipped
-// formUploads.open() and everything the real path does: createTempInput, the
-// temp-input lifecycle, focus/cancel detection, handleTempInputChange, the
-// in-progress guard, and the stale-input cleanup.
-//
-// Playwright's filechooser event drives the widget's own picker, so these tests
-// exercise the path a customer takes. The hook's premise — that browser
-// automation cannot drive a native file picker — was never true here.
-//
-// CLIENT SAFETY. These POST to the real Worker and write real objects into the
-// client's R2 bucket. They do NOT submit a form, so no lead reaches Zoho, but
-// the objects are real and they persist. Three things keep them safe to leave:
+// These POST to the real Worker and write objects to the R2 bucket. No form is
+// submitted, so no lead reaches Zoho, but the objects persist. They are safe to
+// leave because:
 //
 //  1. The content is a synthetic 1x1 JPEG generated here. No customer data,
 //     no real photograph, ~200 bytes.
-//  2. The FOLDER is labelled. R2 is organised by lead reference, and
-//     getLeadReference builds that from the surname — falling back to "SR"
-//     when there is no name, which is indistinguishable from a real enquiry.
-//     stampTestReference() sets last_name first, so every object lands under
-//     AUTOMATEDTEST-XXXX-XXXX/ and the whole run can be found and deleted
-//     by prefix.
+//  2. The folder is labelled. R2 folders follow the lead reference, built
+//     from the surname (or "SR" with no name). stampTestReference() sets
+//     last_name first, so every object lands under AUTOMATEDTEST-XXXX-XXXX/.
 //  3. The filename says so too.
 //
 // Each full run writes exactly two objects (the third test is rejected before
@@ -35,13 +24,11 @@ import { join } from "node:path";
 
 const GET_A_QUOTE = "/get-a-quote";
 
-// Written into last_name BEFORE the first file is picked. The reference is
-// generated once per form on file-select and cached, so this has to happen
-// first or the folder is already named.
+// Set in last_name before the first file is picked: the reference is fixed
+// on first file-select.
 //
-// LETTERS ONLY. getLeadReference strips the surname to /[^A-Z]/, so "E2ETEST"
-// silently became the folder "EETEST-..." on the first real run and this
-// spec's own folder assertion caught it. Do not put a digit in here.
+// Letters only. getLeadReference strips non-letters, so a digit would change
+// the folder name.
 const TEST_SURNAME = "AUTOMATEDTEST";
 
 // A 1x1 JPEG. Small on purpose: the point is the client path, not the bytes.
@@ -55,14 +42,11 @@ const JPEG_1PX = Buffer.from(
 /**
  * Open the page and walk to the upload step, with the R2 folder named.
  *
- * The widgets live on step 3. Until the form is walked there they are
- * step-hidden, so Playwright's actionability check never resolves, the click
- * never lands and waitForEvent("filechooser") times out — which is exactly how
- * all three of these failed the first time they were ever run.
+ * The widgets are on step 3 and step-hidden until then, so the picker cannot
+ * open earlier.
  *
- * last_name goes through `answers`, which the driver pins: its generic filler
- * would otherwise put "test" in every unrecognised text input and the objects
- * would land under TEST- instead of AUTOMATEDTEST-.
+ * last_name goes through `answers`, which the filler never overwrites;
+ * otherwise it would be "test" and objects would land under TEST-.
  */
 async function goToUploadStep(page) {
   await page.goto(GET_A_QUOTE);
@@ -102,9 +86,8 @@ test.describe("upload widget — the real picker path", () => {
     await goToUploadStep(page);
     const widget = await pickFile(page, 0, jpegOnDisk());
 
-    // The widget reports progress, then settles with a value. The value field is
-    // what actually reaches Zapier; an empty one means the customer sees a
-    // thumbnail and the CRM gets nothing.
+    // The widget reports progress, then settles with a value. The value field
+    // is what reaches Zapier.
     await expect
       .poll(async () => widget.locator("[data-form-upload-value-image], [data-form-upload-value-file]")
         .first().inputValue(), { timeout: 30_000 })
@@ -112,10 +95,8 @@ test.describe("upload widget — the real picker path", () => {
 
     await expect(widget).not.toHaveAttribute("data-form-state", /loading/);
 
-    // The safety property, asserted rather than assumed: the object must be in
-    // a folder this run can be identified by. If the reference ever stops
-    // deriving from last_name, this fails here instead of quietly seeding the
-    // client's bucket with objects that look like real enquiries.
+    // The object must be in a folder that identifies it as a test, never one
+    // that looks like a real enquiry.
     const storedUrl = await widget
       .locator("[data-form-upload-value-image], [data-form-upload-value-file]")
       .first().inputValue();
@@ -126,16 +107,15 @@ test.describe("upload widget — the real picker path", () => {
   });
 
   test("submit is blocked while an upload is in flight", async ({ page }) => {
-    // formUploads.validate returns false whenever a widget is loading, whether
-    // or not the field is required — otherwise the form hands off with an empty
-    // URL and the lead arrives with no file.
+    // formUploads.validate returns false while any widget is loading, required
+    // or not, so a lead never arrives without its file.
     await goToUploadStep(page);
     const widget = await pickFile(page, 0, jpegOnDisk());
 
     await expect(widget).toHaveAttribute("data-form-state", /loading/, { timeout: 5_000 });
 
-    // Do NOT click submit: a successful submit posts a real lead. Assert the
-    // guard's own state instead.
+    // Submit is not clicked, as it would post a real lead; the guard's state
+    // is asserted instead.
     const loading = await page.evaluate(() => {
       const el = document.querySelector("[data-form-upload]");
       return (el.getAttribute("data-form-state") || "").includes("loading");

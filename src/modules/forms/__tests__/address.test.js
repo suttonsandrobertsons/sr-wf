@@ -415,8 +415,8 @@ describe("address module (demo mode)", () => {
     const { initAddressForms } = await import("../address.js");
     initAddressForms(formEl);
 
-    // The reported bug: user searches by postcode, never picks a suggestion, then
-    // switches to manual — the postcode must NOT satisfy the required Line 1 field.
+    // User searches by postcode, picks no suggestion, then switches to manual:
+    // the postcode must not satisfy the required Line 1 field.
     searchInput.value = "nw2 1dl";
     manualBtn.click();
 
@@ -480,7 +480,7 @@ describe("address module (demo mode)", () => {
     searchInput.value = "12 High Street, London, NW2 1DL";
     manualBtn.click();
 
-    // Not a bare postcode -> stays a Line 1 prefill (pre-existing behaviour, no regression)
+    // Not a bare postcode -> stays a Line 1 prefill
     expect(formEl.querySelector('[name="address_line_1"]').value).toBe("12 High Street, London, NW2 1DL");
     expect(formEl.querySelector('[name="postcode"]').value).toBe("");
   });
@@ -513,7 +513,7 @@ describe("address module (demo mode)", () => {
 
     searchInput.value = "NW2 1DL";
     expect(() => manualBtn.click()).not.toThrow();
-    // No postcode field to route to -> value preserved in Line 1 rather than lost
+    // No postcode field to route to -> value kept in Line 1
     expect(formEl.querySelector('[name="address_line_1"]').value).toBe("NW2 1DL");
   });
 

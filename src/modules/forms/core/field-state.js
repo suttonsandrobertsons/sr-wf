@@ -1,10 +1,7 @@
 // The 'filled' state stamp, and the wrapper a control belongs to.
 //
-// Extracted from formFields on 10 Sep 2026 so uploads.js can stamp a control
-// without importing fields.js.
-//
-// formFields.setFilled and formFields.getWrap still exist and delegate here,
-// so external callers did not change.
+// Separate from fields.js so uploads.js can stamp a control without importing
+// it. formFields.setFilled and formFields.getWrap delegate here.
 
 import { SELECTORS } from './shared.js';
 import { formDom } from './dom.js';

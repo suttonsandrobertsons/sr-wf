@@ -13,12 +13,12 @@ function formPayload(form) {
   return submittedEntries(form.root)
 }
 
-describe('field defect fixes', () => {
+describe('field clean-up', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
   })
 
-  // Fix 1: clearNamedChoiceError radio branch must only clear radios sharing the name.
+  // clearNamedChoiceError clears only radios sharing the name.
   it('clears invalid state only from radios in the named group, not every radio in the form', () => {
     document.body.innerHTML = `
       <form data-form="quote">
@@ -41,7 +41,7 @@ describe('field defect fixes', () => {
     expect(radios[2].hasAttribute('aria-invalid')).toBe(true)
   })
 
-  // Fix 3: radio choice-group errors clear live on change like checkbox groups.
+  // Radio group errors clear on change, like checkbox groups.
   it('clears a radio choice-group error when a radio is selected', () => {
     document.body.innerHTML = `
       <form data-form="quote">
@@ -65,7 +65,7 @@ describe('field defect fixes', () => {
     expect(group.querySelector('[data-form-error]').textContent).toBe('')
   })
 
-  // Fix 4: deliberately-empty aggregate hidden fields must not be re-enabled at submit.
+  // An empty aggregate hidden field stays disabled at submit.
   it('keeps an empty checkbox-group aggregate hidden field disabled through submit prep', () => {
     document.body.innerHTML = `
       <form data-form="quote">
@@ -78,16 +78,14 @@ describe('field defect fixes', () => {
     const form = bootForm(document.querySelector('form'))
     formFields.prepareControlsForSubmit(form)
 
-    // The fix under test is that the aggregate stays DISABLED — that is what
-    // stops it being treated as an answered field. It does not stop it being
-    // submitted: Webflow serialises disabled controls, so `interests` still
-    // reaches Zapier, as an empty string rather than absent.
+    // Staying disabled stops it counting as answered. Webflow still submits
+    // disabled controls, so `interests` reaches Zapier as an empty string.
     const hidden = form.root.querySelector('input[type="hidden"][data-form-name="interests"]')
     expect(hidden.disabled).toBe(true)
     expect(Object.fromEntries(formPayload(form)).interests).toBe('')
 
-    // The two checkboxes carry data-form-name but no name, so Webflow falls back
-    // to positional `Field N` keys for them. Worth seeing in a payload assertion.
+    // The checkboxes have data-form-name but no name, so Webflow gives them
+    // positional `Field N` keys.
     expect(formPayload(form).map(([name]) => name)).toEqual(['Field 1', 'Field 2', 'interests'])
   })
 

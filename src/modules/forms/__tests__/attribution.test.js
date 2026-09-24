@@ -92,7 +92,7 @@ describe('attribution capture + expiry + organic inference', () => {
     if (originalReferrer) {
       Object.defineProperty(Document.prototype, 'referrer', originalReferrer)
     }
-    // Do not attempt to restore window.location (jsdom limitation); tests set search via replaceState where possible
+    // Do not attempt to restore window.location (jsdom does not allow it); tests set search via replaceState where possible
   })
 
   it('capture writes first landing and UTM from URL, persists to storage', () => {
@@ -211,7 +211,7 @@ describe('attribution capture + expiry + organic inference', () => {
 
     expect(id).not.toMatch(/NaN/)
     expect(id).toMatch(SHORT_REF_RE)
-    // No unix timestamp (10 digits) or "-N-" counter segment leaks into it.
+    // No unix timestamp (10 digits) or "-N-" counter segment appears in it.
     expect(id).not.toMatch(/-\d{9,}-/)
     root.remove()
   })
@@ -448,7 +448,7 @@ describe('attribution capture + expiry + organic inference', () => {
     const form = { root }
     const id = formAttribution.getLeadReference(form)
 
-    // Generation no longer touches storage at all, so a throwing store is a no-op.
+    // Generation does not touch storage, so a throwing store has no effect.
     expect(id).toMatch(SHORT_REF_RE)
 
     formAttribution.getStorage = origGet
@@ -508,11 +508,9 @@ describe('attribution capture + expiry + organic inference', () => {
   })
 })
 
-// Consent is no longer self-gated in this bundle — Consent Pro (consentpro.com)
-// blocks/unblocks the actual tracking resources by category upstream, and no
-// longer exposes a consent flag for the code to read. `capture()` /
-// `pushDataLayer()` therefore always run; the tags they feed are gated by
-// Consent Pro. See conditions.js.
+// Consent Pro (consentpro.com) blocks tracking resources by category, and
+// exposes no consent flag to read. `capture()` / `pushDataLayer()` always run;
+// the tags they feed are gated by Consent Pro. See conditions.js.
 
 describe('phone autocomplete normalization', () => {
   function makePhoneForm(phoneValue, countryValue = '+44', countryOptions = null) {
@@ -671,8 +669,8 @@ describe('redirect form attribution carry + Reference on TY', () => {
 
     expect(targetHref).toBeTruthy()
     const u = new URL(targetHref, 'http://localhost/')
-    // The implementation uses formParams.getParamName which for redirect forms uses data-form-redirect-form as key.
-    // We assert that the values appear either bare or under the target key prefix.
+    // formParams.getParamName keys redirect forms by data-form-redirect-form,
+    // so values may appear bare or under that prefix.
     const allParams = Array.from(u.searchParams.entries()).map(([k, v]) => `${k}=${v}`).join('&')
     expect(allParams).toMatch(/utm_source=google/)
     expect(allParams).toMatch(/GCLID=g-from-ad/)
@@ -777,13 +775,12 @@ describe('cookie fallback resilience', () => {
   })
 })
 
-// Regression guard for the WhatsApp/email trailing-text absorption bug:
-// links whose greeting was greedily pulled into the URL produce UTM values
-// like `direct Hello`, `whatsapp\nHello`, tabs and CRLFs. A valid UTM value
-// never contains whitespace, so every one must collapse to its first token
-// at the capture/read choke point — reaching hidden fields, dataLayer,
-// redirect params and the WhatsApp link already clean.
-describe('UTM sanitization (whitespace-corruption guard)', () => {
+// WhatsApp and email links: trailing text stays out of the value. A greeting
+// pulled into the URL can produce UTM values like `direct Hello` or
+// `whatsapp\nHello`. A valid UTM value has no whitespace, so each collapses to
+// its first token at capture/read, before it reaches hidden fields, dataLayer,
+// redirect params or the WhatsApp link.
+describe('UTM sanitization (whitespace)', () => {
   const cases = [
     ['space (direct+Hello decodes to a space)', 'direct Hello', 'direct'],
     ['newline (whatsapp%0AHello)', 'whatsapp\nHello', 'whatsapp'],
@@ -812,7 +809,7 @@ describe('UTM sanitization (whitespace-corruption guard)', () => {
 
     const url = new URL(window.location.href)
     url.search = ''
-    // Simulate WhatsApp having absorbed a greeting into the query string.
+    // A greeting carried into the query string by a WhatsApp link.
     url.searchParams.set('utm_source', 'whatsapp')
     url.searchParams.set('utm_medium', 'whatsapp\nHello')
     url.searchParams.set('utm_campaign', 'summer_sale-2026')
@@ -894,12 +891,10 @@ describe('UTM sanitization (whitespace-corruption guard)', () => {
   })
 })
 
-// PII/cookie remediation: cookies must be Secure; the success snapshot must
-// keep only fields a thank-you page renders (documented in
-// docs/developer/thank-you-outputs.md in the private companion repo), must be
-// consumed-then-cleared by trackSuccess (not by hydrateOutputs), and must
-// expire via a savedAt TTL.
-describe('PII/cookie remediation', () => {
+// Cookies are Secure; the success snapshot keeps only fields a thank-you page
+// needs, is cleared by trackSuccess (not hydrateOutputs) after use, and
+// expires via a savedAt TTL.
+describe('personal data and cookies', () => {
   function withCookieSpy(fn) {
     const writes = []
     const orig = Object.getOwnPropertyDescriptor(Document.prototype, 'cookie')
@@ -940,10 +935,10 @@ describe('PII/cookie remediation', () => {
     expect(compact.enquiry_type).toBe('loan')
     expect(compact.asset_type).toBe('Watches')
     expect(typeof compact.savedAt).toBe('number')
-    // email/phone ARE retained now — the TY-page form_submission push needs them.
+    // email/phone are kept: the thank-you page form_submission push needs them.
     expect(compact.email).toBe('dave@example.com')
     expect(compact.phone).toBe('+447900000000')
-    // OTHER PII the old snapshot captured must still be absent.
+    // Other personal data must be absent.
     expect(compact.appointment_date).toBeUndefined()
     expect(compact.requested_amount).toBeUndefined()
     expect(compact.contact_method).toBeUndefined()
@@ -983,7 +978,7 @@ describe('PII/cookie remediation', () => {
     expect(refOut.textContent).toBe('SR-200')
     // email is retained in the snapshot but NOT surfaced by getSuccessData → not rendered.
     expect(emailOut.textContent).toBe('')
-    // hydrateOutputs no longer clears — trackSuccess owns the clear (after the push).
+    // hydrateOutputs does not clear; trackSuccess clears after the push.
     expect(window.sessionStorage.getItem('sr_form_success_SR-200')).not.toBeNull()
 
     scope.remove()
@@ -1012,9 +1007,8 @@ describe('PII/cookie remediation', () => {
   })
 })
 
-// The fix: fire form_submission from the thank-you page load using the stored
-// snapshot, so a native lead-form POST (which navigates away before the
-// pre-handoff push can land) still reports the conversion. No navigation race.
+// form_submission fires on the thank-you page from the stored snapshot, so a
+// native form POST that navigates away early still reports the conversion.
 describe('thank-you page form_submission push (formSuccessPage.trackSuccess)', () => {
   let attrStorage
   let origGetStorage

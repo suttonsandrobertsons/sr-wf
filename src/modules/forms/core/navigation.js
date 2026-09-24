@@ -4,8 +4,6 @@
 // formSteps and formParams are one file because they call each other — a step
 // change writes the URL, and a URL change sets the step. Splitting them would
 // buy two names and a circular import.
-//
-// Split out of conditions.js on 9 Sep 2026.
 
 import { SELECTORS, formConfig } from './shared.js';
 import { formLogger, formDom } from './dom.js';
@@ -167,8 +165,8 @@ export const formSteps = {
     const currentIndex = availableSteps.indexOf(currentStep);
 
     // When the current step is out of range or condition-hidden, fall back to
-    // the first available step (1) rather than leaking "Step 0" into the UI
-    // and step= condition matching.
+    // the first available step (1) rather than showing "Step 0" or matching
+    // step= conditions against it.
     return currentIndex >= 0 ? currentIndex + 1 : (availableSteps.length ? 1 : 0);
   },
 
@@ -195,8 +193,8 @@ export const formSteps = {
 
   // Deep-link guard: returns the furthest step index the customer may land on
   // (e.g. from ?step=2). Clamps to the earliest step with unmet required
-  // fields — this closes the bypass where a lead jumps to ?step=2 and submits
-  // with an empty step 1. Redirect-mode forms (home-hero, loan,
+  // fields, so a lead cannot jump to ?step=2 and submit with an empty step 1.
+  // Redirect-mode forms (home-hero, loan,
   // fulfilment-finder) legitimately deep-link to step 2 with step-1 contact
   // fields prefilled, so satisfied prefills keep the customer on the requested step.
   clampToValidPriorSteps(form, requestedIndex) {
@@ -252,8 +250,11 @@ export const formSteps = {
   },
 };
 
-// REDIRECT-MODE FORMS
+// URL-PARAM PREFILL AND URL STATE
 // ----------------------------------------------------------------------------
+// Values here match lowercased, with an alias table, and only when prefilling
+// from query params, never on submit. Elsewhere matching is normalizeSlug
+// (gold.js) or exact and case-sensitive (conditions.js matchesEquality).
 
 const WRAPPED_HISTORY_FLAG = Symbol.for('suttons.forms.wrappedHistoryMethod');
 
@@ -398,7 +399,7 @@ export const formParams = {
 
     const requestedIndex = Math.min(stepNumber - 1, form.steps.length - 1);
 
-    // clampToValidPriorSteps enforces the step-1 bypass guard here.
+    // clampToValidPriorSteps enforces the deep-link guard here.
     form.stepIndex = formSteps.clampToValidPriorSteps(form, requestedIndex);
   },
 
@@ -700,5 +701,3 @@ export const formParams = {
     });
   },
 };
-
-// ============================================================================

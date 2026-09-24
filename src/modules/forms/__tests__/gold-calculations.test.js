@@ -20,16 +20,13 @@ const quote = {
   source: 'test',
 }
 
-// The absolute money figures throughout this file were validated against the
-// client's own pricing spreadsheet in July 2026, at a 2% spot discount and a
-// flat 88% purchase rate. They are parity fixtures for the FORMULA and its
-// MROUND-to-50p behaviour, so they are pinned to those rates rather than
-// rewritten every time a rate moves — rewriting them would replace the
-// client-validated numbers with our own arithmetic.
+// Most money figures in this file match the pricing spreadsheet checked in
+// July 2026, at a 2% spot discount and a flat 88% purchase rate. They test the
+// formula and its 50p rounding, so this fixture pins those rates on purpose.
 //
-// The live rates are asserted separately, by name and by resulting figure, in
-// "live configured rates (869eu8kr1)" at the end of this file. If you change a
-// rate in config.js, that block is what should fail, not these.
+// The current rates (3% discount, 86% jewellery, 88% coins and bars, 75% loan)
+// are checked in "current configured rates" near the end of this file. A rate
+// change in config.js should fail there, not here.
 const PINNED = {
   spotDiscountPercent: 2,
   purchaseToValuePercent: 88,
@@ -364,7 +361,7 @@ describe('gold calculator financials', () => {
     expect(form.querySelector('[name="gold_item_type_1"][value="bar"]')).toBeTruthy()
 
     expect(form.querySelector('[name="gold_item_1_type"]').value).toBe('Jewellery')
-    // "9ct Gold" is Zoho's own Item_N_Metal option; the bare "9" matched none.
+    // "9ct Gold" is Zoho's own Item_N_Metal option; a bare "9" matches none.
     expect(form.querySelector('[name="gold_item_1_metal_type"]').value).toBe('9ct Gold')
     expect(form.querySelector('[name="gold_item_1_weight_grams"]').value).toBe('1')
     expect(form.querySelector('[name="gold_item_1_quantity"]').value).toBe('2')
@@ -379,7 +376,7 @@ describe('gold calculator financials', () => {
     expect(form.querySelector('[name="gold_item_2_type"]').value).toBe('Bar')
     expect(form.querySelector('[name="gold_item_2_bullion_name"]').value).toBe('1g_bar')
     expect(form.querySelector('[name="gold_item_2_quantity"]').value).toBe('3')
-    // Per-item money values are now whole £ (one precision): 253.5 → 254.
+    // Per-item money values are whole £: 253.5 → 254.
     expect(form.querySelector('[name="gold_item_2_purchase_value"]').value).toBe('254')
     expect(form.querySelector('[name="gold_item_2_loan_value"]').value).toBe('216')
     expect(form.querySelector('[name="gold_item_2_amount"]').value).toBe('254')
@@ -488,7 +485,7 @@ describe('gold calculator financials', () => {
     })
   })
 
-  it('emits Zoho amount fields as whole £ and formats interest (#1, #4)', () => {
+  it('emits Zoho amount fields as whole £ and formats interest', () => {
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`
     // A jewellery item chosen to produce non-whole totals so rounding is visible.
@@ -512,13 +509,10 @@ describe('gold calculator financials', () => {
   it('per-item amounts always add up to gold_total, across multiple .5-ending items', () => {
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`
-    // Three separate 9ct items whose per-item loan value ends in .5 — the case
-    // where independent whole-£ rounding used to drift from the rounded sum.
-    //
-    // 1.5g, not 10g. At 10g the loan value is a whole £270 and this test
-    // passes without exercising anything; it was deleted on 9 Sep 2026 and
-    // restored on 10 Sep with a fixture that still lands on .5. The
-    // precondition below is asserted so it cannot go quiet again.
+    // Three 9ct items whose loan value ends in .5, where rounding each item
+    // separately could drift from the rounded sum. 1.5g, not 10g: at 10g the
+    // loan is a whole £270 and nothing is exercised. The precondition below
+    // keeps the fixture on .5.
     const items = [1, 2, 3].map(() => (
       { itemType: 'jewellery', metalType: '9', weightGrams: '1.5', quantity: '1' }
     ))
@@ -541,15 +535,10 @@ describe('gold calculator financials', () => {
 
 
   it('shows the purchase figure for "Sell My Items" even when the loan rate is higher', () => {
-    // The live radio submits "Sell My Items", which normalizeSlug turns into
-    // "sell_my_items". Until 10 Sep 2026 getDisplayValue only tested for
-    // "sell", so sell leads fell through to Math.max(purchase, loan). That
-    // gave the right answer only because purchase (86-88%) beats loan (75%).
-    //
-    // This test inverts the rates so the fallback would give the WRONG answer,
-    // which is what makes it a real assertion rather than a tautology.
-    // Restored here, not in afterEach: beforeEach only pins the three rates in
-    // PINNED, so leaving this set leaks into every later test in the file.
+    // The form's radio submits "Sell My Items" (slug "sell_my_items"). The
+    // rates are inverted so loan beats purchase; otherwise the higher-of-two
+    // fallback would pass by coincidence. Restored at the end of the test
+    // because PINNED does not cover the loan rate.
     const realLoanRate = formConfig.gold.loanToValuePercent
     try {
       formConfig.gold.loanToValuePercent = 95
@@ -641,13 +630,11 @@ describe('gold calculator financials', () => {
 
 })
 
-describe('getItem reads collapsed single-submit branch names (multi-item bullion regression)', () => {
-  // Repro of the live bug: on a multi-item gold form, the shared single-submit
-  // dedup renames item 2+'s bullion <select> to `_disabled_bullion_name`. The
-  // select stays visible with the user's value, but its name no longer matches
-  // the `gold_bullion_name_2_` indexed prefix. getItem must still read it, else
-  // submit falsely errors "Choose the coin or bar." and the persisted
-  // gold_item_2_bullion_name field goes empty.
+describe('getItem reads collapsed single-submit branch names (multi-item bullion)', () => {
+  // On a multi-item form, single-submit renames item 2+'s bullion <select> to
+  // `_disabled_bullion_name`. It keeps the user's value, so getItem must still
+  // read it; otherwise submit shows "Choose the coin or bar." and
+  // gold_item_2_bullion_name is empty.
   function buildItem2WithCollapsedBullion() {
     const form = document.createElement('form')
     form.setAttribute('data-form', 'gold')
@@ -690,7 +677,7 @@ describe('getItem reads collapsed single-submit branch names (multi-item bullion
     expect(item.bullionName).not.toBe('1g_bar')
   })
 
-  it('still prefers the properly indexed name when it is present (no regression for item 1)', () => {
+  it('still prefers the properly indexed name when it is present (item 1)', () => {
     const form = document.createElement('form')
     form.setAttribute('data-form', 'gold')
     form.innerHTML = `
@@ -713,7 +700,7 @@ describe('getItem reads collapsed single-submit branch names (multi-item bullion
   })
 })
 
-describe('item type is emitted in Zoho-picklist case, not the internal slug (#5)', () => {
+describe('item type is emitted in Zoho-picklist case, not the internal slug', () => {
   // Internal item type stays a lowercase slug (load-bearing for condition rules
   // and pricing lookup); only the emitted gold_item_N_type is display-cased.
   function emitType(item) {
@@ -736,9 +723,9 @@ describe('item type is emitted in Zoho-picklist case, not the internal slug (#5)
   })
 })
 
-describe('2% spot discount — offers only, not the displayed spot value', () => {
-  // spotDiscountPercent (config.gold) trims the spot before the purchase/loan
-  // ratios apply; the displayed spotValue keeps the raw market spot.
+describe('spot discount — offers only, not the displayed spot value', () => {
+  // Runs at the pinned 2%. The discount trims spot before the purchase/loan
+  // ratios apply; spotValue keeps the raw market spot.
   it('applies the discount to purchase/loan but leaves spotValue raw', () => {
     const row = findPricingRow(pricingRows, { itemType: 'bar', bullionName: 'pure_1g_bar', quantity: '1' })
     const item = { itemType: 'bar', bullionName: 'pure_1g_bar', quantity: '1' }
@@ -807,7 +794,7 @@ describe('spot discount (getSpotOfferMultiplier)', () => {
   const original = formConfig.gold.spotDiscountPercent
   afterEach(() => { formConfig.gold.spotDiscountPercent = original })
 
-  it('is 0.98 for the configured 2% discount', () => {
+  it('is 0.98 for a 2% discount', () => {
     formConfig.gold.spotDiscountPercent = 2
     expect(getSpotOfferMultiplier()).toBeCloseTo(0.98, 10)
   })
@@ -826,7 +813,7 @@ describe('spot discount (getSpotOfferMultiplier)', () => {
 })
 
 describe('offer ratios (getOfferRatio)', () => {
-  it('reads purchase 0.88 and loan 0.75 from config', () => {
+  it('reads purchase 0.88 (pinned) and loan 0.75 from config', () => {
     expect(getOfferRatio('purchase')).toBeCloseTo(0.88, 10)
     expect(getOfferRatio('loan')).toBeCloseTo(0.75, 10)
   })
@@ -852,8 +839,8 @@ describe('purchase & loan formulas', () => {
     expect(l.loanPerGram).toBe(56.5)  // mround(0.75*100*0.75=56.25, .5)
     expect(l.loanPerUnit).toBe(565)   // mround(10*56.5, .5)
     expect(l.loanValue).toBe(565)
-    // A single-rounding loan would have been mround(562.5,.5)=562.5 — the
-    // symmetric per-gram rounding deliberately changes the result.
+    // Single rounding would give mround(562.5,.5)=562.5; per-gram rounding
+    // changes the result on purpose.
     expect(l.loanValue).not.toBe(562.5)
   })
 
@@ -949,7 +936,7 @@ describe('summary aggregation & whole-£ footing', () => {
     ], 'loan')
     expect(s.loanTotal).toBe(303)        // 101 * 3
     expect(s.indicativeValue).toBe(303)
-    expect(s.indicativeValue).not.toBe(302) // round(301.5) — the old drift
+    expect(s.indicativeValue).not.toBe(302) // round(301.5): rounding the sum instead of each row
   })
 
   it('indicative value follows the enquiry type', () => {
@@ -1070,7 +1057,7 @@ describe('pricing edge cases', () => {
   })
 })
 
-describe('consistency hardening — traceability & one-precision', () => {
+describe('traceability and one precision', () => {
   it('emits the discount and the offer spot so purchase/loan are reconstructable', () => {
     const form = document.createElement('form')
     form.innerHTML = `<input type="radio" name="enquiry_type" value="loan" checked>`
@@ -1122,7 +1109,7 @@ describe('config — rate bands are shared, not duplicated', () => {
   })
 })
 
-describe('purity source is type-locked (#2 option A)', () => {
+describe('purity source is type-locked', () => {
   it('jewellery uses carats and ignores a stray purityPercent', () => {
     // Row carries BOTH — carats is authoritative for jewellery.
     const ratio = getPurityRatio({ itemType: 'jewellery', purityCarats: 22, purityPercent: 50 }, {}, 'jewellery')
@@ -1150,11 +1137,10 @@ describe('purity source is type-locked (#2 option A)', () => {
   })
 })
 
-// certain coin groups (Swiss/French Francs, Gold American Eagles) are
-// priced below the default 88% purchase / 75% loan ratios. A CMS pricing row
-// carries `extraDiscountPercent`; both offers for that row are trimmed by a
-// FURTHER whole percent ON TOP of the base ratio (multiplicative:
-// ratio × (1 - extra/100)). Blank/zero/out-of-range → no adjustment.
+// Some coin groups (Swiss/French Francs, Gold American Eagles) are priced
+// below the base ratios. A CMS pricing row's `extraDiscountPercent` trims both
+// offers further: ratio × (1 - extra/100). Blank, zero or out of range means
+// no adjustment. Figures below use the pinned 2% / 88%.
 describe('gold group discounts', () => {
   // A clean 100% / 1g coin at £100/g spot makes the arithmetic exact:
   //   offerSpot = 100 × 0.98 = 98
@@ -1190,7 +1176,7 @@ describe('gold group discounts', () => {
     })
   })
 
-  it('leaves an identical row untouched when no discount is set (regression guard)', () => {
+  it('leaves an identical row untouched when no discount is set', () => {
     const [row] = normalizePricingRows([baseRow])
     expect(row.extraDiscountPercent).toBeNaN()
     expect(calculateEstimate(item, row, SPOT)).toMatchObject({
@@ -1215,9 +1201,8 @@ describe('gold group discounts', () => {
   })
 })
 
-// extended coverage — the discount through every downstream path:
-// the calculators, the emitted Zoho fields, interest/rate-band selection,
-// multi-item footing, fractional percents, and manual rows.
+// The group discount through every downstream path: calculators, Zoho
+// fields, interest and rate bands, multi-item footing, fractions, manual rows.
 describe('gold group discounts — extended coverage', () => {
   const SPOT = 100 // offerSpot = 100 × 0.98 = 98
 
@@ -1325,17 +1310,16 @@ describe('gold group discounts — extended coverage', () => {
 })
 
 // ---------------------------------------------------------------------------
-// 869eu8kr1 — the September 2026 change round. These run on the LIVE config,
-// undoing the top-level pin, so a rate edited in config.js fails HERE.
+// Current rates, in force since 9 Sep 2026. These undo the pin above and run
+// on config.js as it is, so a rate change fails here.
 // ---------------------------------------------------------------------------
-describe('live configured rates (869eu8kr1)', () => {
+describe('current configured rates', () => {
   beforeEach(() => {
     Object.assign(formConfig.gold, LIVE_RATES)
   })
 
-  it('carries the rates the client asked for', () => {
-    // Sam, 25 Aug 2026: top line discount 2% -> 3%; jewellery only 88% -> 86%,
-    // coins and bars remain at 88%.
+  it('carries the agreed rates', () => {
+    // 3% spot discount; 86% jewellery purchase; 88% coins and bars.
     expect(formConfig.gold.spotDiscountPercent).toBe(3)
     expect(formConfig.gold.purchaseToValuePercent).toBe(88)
     expect(formConfig.gold.purchaseToValuePercentByItemType.jewellery).toBe(86)
@@ -1349,16 +1333,16 @@ describe('live configured rates (869eu8kr1)', () => {
   })
 
   it('leaves every loan ratio on loanToValuePercent, jewellery included', () => {
-    // The per-item-type table is consulted for purchases only. If this ever
-    // fails, a jewellery purchase rate has started moving loan offers.
+    // The per-item-type table applies to purchases only, so jewellery
+    // purchase rates never move loan offers.
     expect(getOfferRatio('loan', 'jewellery')).toBeCloseTo(0.75, 10)
     expect(getOfferRatio('loan', 'coin')).toBeCloseTo(0.75, 10)
     expect(getOfferRatio('loan', undefined)).toBeCloseTo(0.75, 10)
   })
 
   it('falls back to the flat 88% for an unknown item type, never to 0 or 1', () => {
-    // A blank fallback quoting 1 would offer 100% of spot; 0 would offer
-    // nothing. Both look plausible on screen, so they are guarded explicitly.
+    // 1 would offer 100% of spot and 0 would offer nothing; both look
+    // plausible on screen.
     const ratio = getOfferRatio('purchase', 'something-else')
     expect(ratio).toBeCloseTo(0.88, 10)
     expect(ratio).not.toBe(1)
@@ -1377,8 +1361,7 @@ describe('live configured rates (869eu8kr1)', () => {
     }
   })
 
-  // The worked examples sent to the client for sign-off. £100/g keeps the
-  // arithmetic checkable by hand against their pricing sheet.
+  // Worked examples at £100/g, checkable by hand against the pricing sheet.
   it('quotes 18ct jewellery, 15g at £100/g as £937.50 purchase and £817.50 loan', () => {
     const item = { itemType: 'jewellery', metalType: '18', weightGrams: '15', quantity: '1' }
     const estimate = calculateEstimate(item, findPricingRow(pricingRows, item), 100)
@@ -1417,10 +1400,9 @@ describe('live configured rates (869eu8kr1)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// bullion_name_N is the value that actually reaches Zoho, and nothing asserted
-// it before this change round.
+// bullion_name_N is the item description that reaches Zoho.
 // ---------------------------------------------------------------------------
-describe('bullion_name_N — the single item description (869eu8kr1)', () => {
+describe('bullion_name_N — the single item description', () => {
   function slotValues(items) {
     const form = document.createElement('form')
     document.body.append(form)
@@ -1438,17 +1420,10 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
     return out
   }
 
-  it('describes jewellery as "<carat>ct Gold Jewellery", the client\'s exact wording', () => {
-    // Their 10 Aug table asked for "9ct Gold Jewellery" and this now sends it
-    // verbatim. An earlier build sent the bare "9ct Gold" on the grounds that
-    // Item_N_Description appends {{gold_item_N_type}} and the full phrase
-    // would read "9ct Gold Jewellery 1 Jewellery" — but that template is the
-    // client's and the Zap draft drops the trailing token, so the description
-    // reads "9ct Gold Jewellery 1".
-    //
-    // Note this is deliberately NOT the same value as gold_item_N_metal_type,
-    // which stays "9ct Gold" because Zoho's Metal picklist has no option for
-    // the longer phrase. Asserted together below so the two cannot drift.
+  it('describes jewellery as "<carat>ct Gold Jewellery", the agreed wording', () => {
+    // Deliberately differs from gold_item_N_metal_type, which stays "9ct Gold"
+    // because Zoho's Metal picklist has no option for the longer phrase. Both
+    // are asserted here so they stay distinct.
     const nine = slotValues([{ itemType: 'jewellery', metalType: '9', weightGrams: '10', quantity: '1' }])
     expect(nine.description1).toBe('9ct Gold Jewellery')
     expect(nine.metalType1).toBe('9ct Gold')
@@ -1458,8 +1433,8 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
   })
 
   it('emits the carat as a valid Item_N_Metal option, not the bare number', () => {
-    // Zoho's Item_N_Metal picklist spells these "9ct Gold" ... "24ct Gold".
-    // The bare "9" matched no option on the 16 Aug lead.
+    // Zoho's Item_N_Metal picklist spells these "9ct Gold" ... "24ct Gold";
+    // a bare "9" matches no option.
     const v = slotValues([{ itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' }])
     expect(v.metalType1).toBe('18ct Gold')
   })
@@ -1469,8 +1444,7 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
   })
 
   it('leaves coin and bar descriptions on their CMS label, unchanged', () => {
-    // His note against both was "No change, I don't think." These already
-    // arrive as valid Item_N_Bullion_Type options.
+    // These already arrive as valid Item_N_Bullion_Type options.
     expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).description1)
       .toBe('Sovereign')
     expect(slotValues([{ itemType: 'bar', bullionName: '1g_bar', quantity: '1' }]).description1)
@@ -1485,18 +1459,16 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
   })
 
   it('sends no Bullion Type for a manual "Other" or "Unsure" row', () => {
-    // findPricingRow synthesises label "Other"/"Unsure" for the unmatched
-    // options. Neither is among the 38 Item_N_Bullion_Type options, so sending
-    // it would store an unlisted string — silently unusable, which is the
-    // defect this field was added to remove.
+    // findPricingRow labels unmatched options "Other"/"Unsure". Neither is
+    // among the 38 Item_N_Bullion_Type options, so neither is sent.
     expect(slotValues([{ itemType: 'coin', bullionName: 'other', quantity: '1' }]).bullionType1).toBe('')
     expect(slotValues([{ itemType: 'bar', bullionName: 'unsure', quantity: '1' }]).bullionType1).toBe('')
   })
 
   it('sends a Bullion Type only for coins and bars, never for jewellery', () => {
-    // Item_N_Bullion_Type is a coin/bar picklist. An unlisted jewellery string
-    // is accepted and stored by Zoho, so it fails as DATA rather than as a
-    // write — nothing errors, it just cannot be grouped or reported.
+    // Item_N_Bullion_Type is a coin/bar picklist. Zoho would store an
+    // unlisted jewellery string without error, but it could not be grouped
+    // or reported on.
     expect(slotValues([{ itemType: 'coin', bullionName: 'sovereign', quantity: '1' }]).bullionType1)
       .toBe('Sovereign')
     expect(slotValues([{ itemType: 'bar', bullionName: '1g_bar', quantity: '1' }]).bullionType1)
@@ -1506,8 +1478,8 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
   })
 
   it('always sends Gold as slot 1 asset type, even with nothing priced', () => {
-    // 869eu8kr1 item 3. The Describe Items route parses no items, so slot 1
-    // used to submit an empty asset type and the lead arrived untagged.
+    // The Describe Items route prices no items; slot 1 still carries Gold so
+    // the lead is tagged.
     const form = document.createElement('form')
     document.body.append(form)
     persistItemSlotFields(form, summaryFor([], 'sell'))
@@ -1535,11 +1507,10 @@ describe('bullion_name_N — the single item description (869eu8kr1)', () => {
 })
 
 // ---------------------------------------------------------------------------
-// gold_purchase_rate_percent used to hardcode the flat config value, so a
-// jewellery lead claimed 88% while 86% was applied. It now reports the rates
-// actually used.
+// gold_purchase_rate_percent reports the rates actually applied, so a
+// jewellery lead says 86, not the flat 88.
 // ---------------------------------------------------------------------------
-describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () => {
+describe('gold_purchase_rate_percent reports the applied rate', () => {
   beforeEach(() => {
     Object.assign(formConfig.gold, LIVE_RATES)
   })
@@ -1563,8 +1534,7 @@ describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () =
   })
 
   it('reports both rates, ascending, for a mixed lead', () => {
-    // Five slots means a lead can genuinely mix types, and then no single
-    // rate is true. Saying "86, 88" beats picking one and being wrong.
+    // A mixed lead has no single true rate, so both are reported.
     const f = submitted([
       { itemType: 'jewellery', metalType: '18', weightGrams: '10', quantity: '1' },
       { itemType: 'coin', bullionName: 'sovereign', quantity: '1' },
@@ -1589,8 +1559,7 @@ describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () =
   })
 
   it('falls back to the flat config rate when nothing was priced', () => {
-    // The Describe Items route prices no items, so it keeps reporting exactly
-    // what it always did rather than going blank.
+    // The Describe Items route prices no items; the field is not left blank.
     const f = submitted([])
     expect(f.gold_purchase_rate_percent).toBe('88')
     expect(f.gold_loan_rate_percent).toBe('75')
@@ -1598,8 +1567,8 @@ describe('gold_purchase_rate_percent reports the applied rate (869eu8kr1)', () =
 })
 
 // ---------------------------------------------------------------------------
-// addItem() clones the previous row, so a row can arrive already carrying the
-// previous row's EXPANDED rule. Rewriting in place could never fix that.
+// addItem() clones the previous row, so a new row can arrive carrying the
+// previous row's expanded rule and must be re-indexed.
 // ---------------------------------------------------------------------------
 describe('repeater condition rules survive cloning (multi-item weight reveal)', () => {
   function buildForm() {
@@ -1647,9 +1616,9 @@ describe('repeater condition rules survive cloning (multi-item weight reveal)', 
     const [, second] = form.querySelectorAll('[data-form-gold-item]')
     const rule = weightRule(second)
 
-    // The defect: `gold_bullion_name_1_coin` cannot be re-matched by the
-    // base-name pattern, so row 2 kept row 1's reference and its weight field
-    // never revealed on its own selection.
+    // `gold_bullion_name_1_coin` does not match the base-name pattern, so
+    // without re-indexing row 2 would keep row 1's reference and its weight
+    // field would not reveal on its own selection.
     expect(rule).toContain('gold_bullion_name_2')
     expect(rule).not.toContain('gold_bullion_name_1')
     expect(weightRule(first)).toContain('gold_bullion_name_1')

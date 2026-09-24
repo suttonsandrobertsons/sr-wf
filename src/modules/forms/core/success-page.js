@@ -2,8 +2,6 @@
 //
 // Reads a sessionStorage snapshot written at submit, which expires after 30
 // minutes so a stale tab cannot show someone else's quote.
-//
-// Split out of conditions.js on 9 Sep 2026.
 
 import { formConfig } from './shared.js';
 import { formAttribution, SUCCESS_SNAPSHOT_MAX_AGE_MS } from './attribution.js';
@@ -77,8 +75,8 @@ export const formSuccessPage = {
   },
 
   // Fires the authoritative `form_submission` push from the stored snapshot,
-  // since a native POST races unload and the pre-handoff push doesn't
-  // survive. Matches pushDataLayer's event shape.
+  // since a native POST can unload the page before an earlier push is sent.
+  // Matches pushDataLayer's event shape.
   pushedReferences: new Set(),
   hasPushedNoRef: false,
 
@@ -194,11 +192,3 @@ export const formSuccessPage = {
     return String(value || '').trim();
   },
 };
-
-// ============================================================================
-// URL-PARAM PREFILL AND URL STATE SYNCHRONISATION
-// ============================================================================
-// This is the third value-matching regime: lowercased, with an alias table, and
-// applied only when prefilling from query params — never on submit. The other
-// two are normalizeSlug (gold.js) and exact/case-sensitive (matchesEquality).
-// ============================================================================

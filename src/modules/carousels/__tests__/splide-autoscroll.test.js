@@ -26,8 +26,8 @@ describe("Splide autoscroll", () => {
 		currentIsOverflow = false;
 		pauseAutoScrollBeforeReady = false;
 		overflowBeforeMounted = false;
-		// null disables the marquee measurements entirely, so tests that do not
-		// care about expansion behave exactly as they did before.
+		// null disables the marquee measurements, so tests that do not care
+		// about expansion are unaffected.
 		marqueeSlideWidth = null;
 		marqueeContainerWidth = null;
 		mediaQueryListeners = new Set();
@@ -450,8 +450,8 @@ describe("Splide autoscroll", () => {
 		expect(realSlides(root).length).toBe(afterMount);
 	});
 	it("refuses to expand on an unlaid-out measurement", () => {
-		// Slides exist but have not been laid out yet: 2 x 1px clears a summed
-		// threshold while being meaningless, and previously asked for the cap.
+		// Slides exist but are not laid out yet: 2 x 1px would clear a summed
+		// threshold and ask for the cap, so it must be ignored.
 		const root = buildMarquee({ slideWidth: 1, containerWidth: 2560 });
 
 		createCarousel(root);

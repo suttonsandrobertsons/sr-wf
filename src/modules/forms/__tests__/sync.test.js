@@ -357,7 +357,7 @@ function makeSubmittableForm() {
   return formApp.getFormByRoot(document.querySelector('#lead-form'))
 }
 
-describe('event lifecycle defects', () => {
+describe('event lifecycle', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     formApp.forms.clear()

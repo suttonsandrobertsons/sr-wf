@@ -2,9 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { initGoldForms } from '../gold.js'
 
 // A gold form needs at least one CMS pricing row or createInstance() throws.
-// This suite guards the init latch: a form whose setup throws (e.g. because
-// Webflow injected the pricing rows late) must be retried on a later
-// initGoldForms() pass instead of being permanently marked initialised.
+// A form whose setup throws (e.g. pricing rows arrive late) is retried on a
+// later initGoldForms() pass, not marked initialised for good.
 
 function buildForm() {
   document.body.innerHTML = `
@@ -30,9 +29,8 @@ function addPricingRow(form) {
 
 describe('gold init latch', () => {
   beforeEach(() => {
-    // Keep the async spot-price request pending so createInstance() completes
-    // without surfacing network errors. A fetch call is our proof that
-    // createInstance() actually ran (it is not called when a form is latched).
+    // A pending spot-price request avoids network errors; a fetch call shows
+    // createInstance() ran (it does not run for a latched form).
     global.fetch = vi.fn(() => new Promise(() => {}))
   })
 

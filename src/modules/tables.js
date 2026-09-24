@@ -257,7 +257,6 @@ function buildMobileCards(data, options = {}) {
 
 	wrapper.className = CLASSES.mobileCards;
 	wrapper.setAttribute(ATTRIBUTES.mobileCards, "");
-	// wrapper.setAttribute(ATTRIBUTES.ariaHidden, "true");
 
 	data.rows.forEach((row) => {
 		const card = document.createElement("article");

@@ -132,13 +132,11 @@ describe('submit values', () => {
   })
 
   // New_Lead_Type: enquiry_type + the two sell-only follow-ups, comma-joined for
-  // Zoho's multi-select. Replaces the four same-named hidden inputs that the
-  // single-submit dedup could only ever let one of through.
+  // Zoho's multi-select, as one derived value.
   const leadTypeForm = ({ enquiry, loan, consignment, hiddenFollowUps = false }) => {
     const state = hiddenFollowUps ? 'data-form-state="condition-hidden"' : ''
-    // Render each follow-up's options in the SAME casing as the answer under
-    // test, so a lowercase answer exercises lowercase markup (as the site's
-    // other Yes/No radios use) rather than silently matching nothing.
+    // Options use the same casing as the answer under test, so lowercase
+    // answers exercise lowercase markup.
     const radios = (name, answer) => {
       if (!answer) return ''
       const lower = answer === answer.toLowerCase()
@@ -231,8 +229,7 @@ describe('submit values', () => {
     expect(root.querySelector('[name="New_Lead_Type"]')).toBeNull()
   })
 
-  // Belt-and-braces: if a stale Designer hidden input survives on some page, the
-  // derived value must overwrite it rather than add a second same-named input.
+  // A same-named Designer hidden input is overwritten, not duplicated.
   it('overwrites a leftover hidden New_Lead_Type input instead of duplicating it', () => {
     document.body.innerHTML = `
       <form data-form="quote">

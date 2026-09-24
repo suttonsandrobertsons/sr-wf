@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { formApp } from '../core/app.js'
 import { formSteps } from '../core/navigation.js'
 
-// Regression: a lead could bypass step-1 required validation by deep-linking to
-// a later step (e.g. /get-a-quote?step=2). Redirect-mode forms legitimately
-// land on step 2 with step-1 contact fields prefilled, so the guard must allow
-// that case and only clamp when a prior step has unmet required fields.
+// Deep-linking to a later step (e.g. /get-a-quote?step=2) cannot skip step-1
+// required fields. Redirect-mode forms land on step 2 with step-1 contact
+// fields prefilled, so the guard only clamps when a prior step has unmet
+// required fields.
 
 function setUrl(search) {
   window.history.replaceState({}, '', `/get-a-quote${search}`)

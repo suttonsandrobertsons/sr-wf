@@ -1,8 +1,7 @@
 // Field behaviour: types, filters, validation and required-ness.
 //
-// Split on 10 Sep 2026: uploads to ./uploads.js, value reading to ./values.js,
-// the 'filled' stamp to ./field-state.js, and the group aggregate to
-// ./aggregate.js.
+// Related: uploads in ./uploads.js, value reading in ./values.js, the 'filled'
+// stamp in ./field-state.js, and the group aggregate in ./aggregate.js.
 
 import { SELECTORS, formConfig, fieldTypes, fieldFilters, fieldValidators, fieldRules, cleanPhoneInput, parseNumber, escapeSelector, isEnabledAttribute } from './shared.js';
 import { formLogger, formDom } from './dom.js';
@@ -137,10 +136,9 @@ export const formFields = {
       if (after !== before) field.value = after;
     }
 
-    // Zoho's email field rejects a stray leading/trailing dot or whitespace
-    // (e.g. "jo@x.com." → the create/update Zap fails validation and the lead
-    // is lost). Strip them on blur and again at submit so what reaches Zapier
-    // is clean. Internal dots (sub.domains, first.last) are left untouched.
+    // Zoho's email field rejects a leading/trailing dot or whitespace
+    // ("jo@x.com." fails the Zap). Strip them on blur and again at submit.
+    // Internal dots (sub.domains, first.last) are kept.
     if (fieldType === 'email') {
       const before = field.value;
       const after = before.replace(/^[.\s]+|[.\s]+$/g, '');
@@ -186,18 +184,13 @@ export const formFields = {
 
   // CHOOSE-ONE. A field authored as several same-named controls in the
   // Designer, of which exactly one should reach Zapier — the one whose
-  // condition currently matches.
+  // condition currently matches. Only `bullion_name` uses this: it is a real
+  // <select> the customer operates, so it cannot move to
+  // submit-values/business-rules.js.
   //
-  // Only `bullion_name` still uses this. box_and_papers, meeting_venue and
-  // appointment_length moved to submit-values/business-rules.js on 9 Sep 2026,
-  // because the markup cannot express "otherwise" and their rows overlapped.
-  // bullion_name stays because it is a real <select> the customer operates, not
-  // a hidden literal, so it cannot become a function — it needs the Designer
-  // rename to indexed names instead.
-  // that must collapse to one submitted name. Renaming the inactive controls
-  // with the disabled-name prefix, rather than disabling them, is deliberate:
-  // this runs on every render, and a disabled control can't be typed into —
-  // the customer would be locked out of switching which control is active.
+  // Inactive controls are renamed with the disabled-name prefix rather than
+  // disabled: this runs on every render, and a disabled control can't be
+  // used, so the customer could not switch which control is active.
   prepareChooseOneControls(form) {
     const root = form?.root;
     if (!root) return;
@@ -731,11 +724,7 @@ export const formFields = {
 // submit-values/business-rules.js instead when the value needs a rule a join cannot express:
 // arithmetic, a conditional pick, or a mapping to differently-named outputs.
 //
-// The empty case does NOT differ from a derived field, despite what this
-// comment used to claim. An empty group disables its hidden input — but
-// Webflow's serialiser ignores `disabled` (no `:not(:disabled)` in its
-// selector, and `.val()` reads disabled elements), so the field is still
-// submitted, empty. Measured live on /get-a-quote: `brands=""` is in the
-// payload. Both this and an empty derived field arrive as an empty value, so a
-// Zapier mapping cannot distinguish them by presence.
+// An empty group disables its hidden input, but Webflow submits disabled
+// controls (see core/app.js), so it still arrives as an empty value
+// (`brands=""`), the same as an empty derived field.
 //

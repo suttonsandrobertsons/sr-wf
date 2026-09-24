@@ -305,9 +305,9 @@ export const formEvents = {
 
     formLogger.log(form, 'Submit passed validation, processing.');
 
-    // The success-path work below can throw. Uncaught, it wedges the form:
-    // isSubmitting stays true (future submits are "duplicate"-blocked) and the
-    // button sits disabled. Catch resets submit state so the customer can retry.
+    // The success-path work below can throw. Uncaught, isSubmitting would stay
+    // true (blocking later submits as duplicates) and the button disabled.
+    // Catch resets submit state so the customer can retry.
     try {
       formFields.normalizeBeforeSubmit(form);
       getFormApp().refresh(form);
@@ -366,9 +366,8 @@ export const formEvents = {
       this.armSubmitTimeout(form);
       formLogger.log(form, 'Form handed to Webflow.');
     } catch (error) {
-      // Fail safe: reset submit state so the customer can retry rather than
-      // leaving the form wedged. Does not swallow the submit intent — if the
-      // native event was not prevented, Webflow's own submit still runs.
+      // Reset submit state so the customer can retry. If the native event was
+      // not prevented, Webflow's own submit still runs.
       formLogger.error(form, 'Submit success-path threw; resetting submit state.', error);
       this.resetSubmitState(form);
     }
@@ -487,7 +486,7 @@ export const formEvents = {
     form.hasTrackedSuccess = true;
     form.isSubmitting = false;
     this.clearSubmitTimeout(form);
-    // Success is terminal — stop observing so neither observer leaks.
+    // Success is terminal: disconnect both observers.
     form.successObserver?.disconnect?.();
     form.failureObserver?.disconnect?.();
     formAttribution.pushDataLayer(form);

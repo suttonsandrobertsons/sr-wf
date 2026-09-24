@@ -34,7 +34,6 @@ import { formAttribution } from "./forms/core.js";
  */
 
 // WhatsApp Business number. Format: country code, no leading +, no spaces.
-// This is the live production line.
 const WHATSAPP_NUMBER = "447398469961";
 
 const SELECTORS = {
@@ -72,9 +71,9 @@ function resolveAttribution() {
 		// Defensive: attribution must never block the WhatsApp link.
 	}
 
-	// Raw-URL fallback bypasses the attribution store, so sanitize here too —
-	// a WhatsApp/email link that absorbed trailing text (e.g. `direct Hello`)
-	// must never reach the pre-filled WhatsApp link or dataLayer verbatim.
+	// Raw-URL fallback bypasses the attribution store, so sanitise here too:
+	// a link that absorbed trailing text (e.g. `direct Hello`) must not reach
+	// the pre-filled WhatsApp message or dataLayer.
 	const params = new URLSearchParams(window.location.search);
 	const clean = (v) => formAttribution.sanitizeUtmValue(v || "");
 	return {
@@ -88,13 +87,13 @@ function resolveAttribution() {
  * Build the pre-filled WhatsApp deep link for the current page.
  * Carries the greeting plus the landing-page URL (with resolved UTM parameters).
  *
- * Message order is URL first, "Hello" last, at the client's request.
+ * Message order is URL first, "Hello" last, by design.
  * WhatsApp's link auto-detection can greedily absorb the trailing
  * "Hello" into the URL's query string on click-through (e.g. `utm_medium=direct`
  * → `direct Hello`). This is DELIBERATELY tolerated here because the corruption
  * is neutralised at the capture choke point: sanitizeUtmValue() collapses any
  * such value back to its first token on the landing page, so attribution stays
- * clean regardless of ordering. See conditions.js sanitizeUtmValue (6 Jul fix).
+ * clean regardless of ordering. See conditions.js sanitizeUtmValue.
  */
 function buildWhatsappLink(number) {
 	const url = new URL(window.location.href);
@@ -109,9 +108,8 @@ function buildWhatsappLink(number) {
 }
 
 /**
- * Notify GTM that the WhatsApp action was clicked, so the GA4 whatsapp_click
- * event survives the migration off the old .qlwapp-toggle handler. Guarded so
- * it never throws when GTM/dataLayer is absent (matches the form engine).
+ * Notify GTM that the WhatsApp action was clicked (GA4 whatsapp_click event).
+ * Does nothing when GTM/dataLayer is absent (matches the form engine).
  */
 function pushWhatsappClick(number) {
 	if (typeof window.dataLayer === "undefined") return;

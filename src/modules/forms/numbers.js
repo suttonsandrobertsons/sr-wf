@@ -1,7 +1,4 @@
 // Parsing, rounding and formatting for money and quantities.
-//
-// Renamed from shared.js on 9 Sep 2026: there were two files called
-// shared.js in this tree, and this one has a specific job.
 
 export function parseNumber(value) {
   let clean = String(value ?? "").replace(/[^0-9.-]/g, "");

@@ -11,7 +11,6 @@ export function initProcess() {
 
 		// Every item gets a connecting line, including the last: dropping it would
 		// leave the final number with nothing to animate in on.
-		// const lines = items.slice(0, -1);
 		const lines = items;
 
 		gsap.set(items, { "--process--number-opacity": 0 });
@@ -25,10 +24,8 @@ export function initProcess() {
 			scrollTrigger: {
 				trigger: trigger,
 				start: "top 50%",
-				// end: () => `+=${Math.max(1, items.length - 1) * window.innerHeight}`,
 				end: "top 25%",
 				scrub: true,
-				// pin: true,
 				anticipatePin: 1,
 				invalidateOnRefresh: true,
 			},
@@ -49,5 +46,3 @@ export function initProcess() {
 		});
 	});
 }
-
-/* test */

@@ -1,13 +1,12 @@
 // Values the bundle decides and submits for the customer.
 //
-// Replaces derived-fields.js (9 Sep 2026), whose name covered three unrelated
-// kinds of field. Split by what the code does:
+// Split by what the code does:
 //
 //   ./business-rules.js   one outcome chosen from enumerable answers
 //   ./format-datetime.js  parsing and arithmetic over free input
 //
 // Not here: environment capture (first_page, GCLID, lead_reference) is in
-// core/conditions.js. Gold money and per-slot fields are in gold.js.
+// core/attribution.js. Gold money and per-slot fields are in gold.js.
 
 import { formConfig } from '../config.js'
 import { formValues } from '../core/values.js'
@@ -17,7 +16,7 @@ import { writeAppointmentDatetimes, writeFormattedFields } from './format-dateti
 
 // Rename any control that still carries this name in the Designer markup.
 // Renaming is the only way to remove a key: Webflow submits disabled controls.
-// The renamed control submits as _disabled_<name>, as it did before.
+// The renamed control submits as _disabled_<name>.
 function neutraliseLegacyControls(root, name) {
   const prefix = formConfig.submit?.unsubmittedNamePrefix || '_disabled_'
 
@@ -31,10 +30,9 @@ function neutraliseLegacyControls(root, name) {
 /**
  * Write a value under a name this code owns.
  *
- * Neutralise first, ALWAYS, even when the rule returns null. The first version
- * skipped the whole function on null, so the Designer inputs kept their names
- * and Webflow took the last one. On get-a-quote that sent
- * box_and_papers = "None" for every lead that does not ask the question.
+ * Neutralise first, always, even when the rule returns null. Otherwise the
+ * Designer inputs keep their names and Webflow submits the last one (e.g.
+ * box_and_papers = "None" on a get-a-quote lead that never asked).
  *
  * setHidden alone is not enough: it reuses the first existing input with the
  * name instead of appending, so the result would depend on markup order.

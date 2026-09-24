@@ -107,10 +107,9 @@ describe('upload value routing by category', () => {
 // Upload lifecycle: loading gate, A-then-B race, parse/empty success handling
 // ---------------------------------------------------------------------------
 
-// Minimal XMLHttpRequest stand-in. postFile now uses XHR (not fetch) so it can
-// wire xhr.upload.onprogress for a live percentage. Instances are captured so a
-// test can drive progress/completion/timeout/abort by hand; set MockXHR.onSend
-// to auto-respond synchronously for the simple await-and-assert cases.
+// Minimal XMLHttpRequest stand-in. postFile uses XHR (not fetch) for
+// xhr.upload.onprogress. Instances are captured so a test can drive progress,
+// completion, timeout and abort; set MockXHR.onSend to respond synchronously.
 class MockXHR {
   constructor() {
     this.upload = {}

@@ -7,9 +7,8 @@
 //   checkbox group           several checkboxes of ONE field -> one field
 //                            ("contact_preferences": Email,Phone)
 //
-// They grew up separately in fields.js and choices.js, converged on the same
-// three functions, and were merged here on 10 Sep 2026. The only difference
-// left is the marker attribute each stamps on its hidden input.
+// Both share the functions here; they differ only in the marker attribute
+// each stamps on its hidden input.
 //
 // Why a hidden input at all: Webflow submits `fields[name] = value` per
 // control, so N controls sharing a name collapse to the last one in document
@@ -73,10 +72,9 @@ export function writeAggregateValue(hidden, values) {
   return true;
 }
 
-// The ONLY mechanism here that produces a genuinely absent key is the
-// choose-one mechanism (submit.chooseOneFieldNames), because it RENAMES the
-// losers to `_disabled_<name>`. Renaming is the only thing Webflow respects.
-// See docs/developer/twins.md in the private repository.
+// Neither mechanism removes a key. Only choose-one (submit.chooseOneFieldNames)
+// does, by renaming the others to `_disabled_<name>`; Webflow ignores
+// `disabled` (see core/app.js).
 
 export const formFieldGroups = {
   render(form) {

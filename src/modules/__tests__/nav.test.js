@@ -59,15 +59,11 @@ describe("initNav", () => {
 		expect(scrollTriggerCreate).toHaveBeenCalledTimes(1);
 	});
 
-	/* SKIPPED 2026-09-09 — the assertion is correct; nav.js has the defect.
-	   applyMegaFallback() already skips items carrying data-nav-target, but
-	   buildGeneralItems() bakes the column fallback into href first via
-	   getGeneralUrl(..., fallback), so the guard never gets a chance and a
-	   panel-opening item ships with a real href. Desktop has no click
-	   interception (only the mobile handler at nav.js:658), so this is
-	   live-effective. Fix is to withhold the fallback when the item has a
-	   target. Skipped, not deleted, because changing nav hrefs on 164 pages
-	   does not belong in the gold form change round. */
+	/* Skipped: covers behaviour nav.js does not implement. buildGeneralItems()
+	   sets the column fallback href via getGeneralUrl(..., fallback) before
+	   applyMegaFallback() checks data-nav-target, so a panel-opening item
+	   gets a real href. Passing would mean withholding the fallback for items
+	   with a target, which changes nav links on every page. */
 	it.skip("uses target panel ids before general URL fallback links", async () => {
 		Object.defineProperty(document, "readyState", {
 			configurable: true,

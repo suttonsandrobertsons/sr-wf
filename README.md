@@ -1,4 +1,4 @@
-# Suttons & Robertsons — Webflow client bundle
+# Suttons & Robertsons — Webflow site bundle
 
 Front-end JavaScript for the Suttons & Robertsons Webflow site. The built bundle
 (`dist/loader.js`) is loaded by the live site via jsDelivr.
@@ -14,8 +14,7 @@ Loaded on the site with:
 
 ```html
 <script type="module"
-  src="https://cdn.jsdelivr.net/gh/suttonsandrobertsons/suttons-robertsons-public@COMMIT_SHA/dist/loader.js"></script>
+  src="https://cdn.jsdelivr.net/gh/suttonsandrobertsons/sr-wf@COMMIT_SHA/dist/loader.js"></script>
 ```
 
-Documentation is maintained separately. `SIMPLE.md` / `AGENTS.md` / `CLAUDE.md` are
-notes for AI coding assistants and have no effect on the built bundle.
+Documentation is in the private repository `suttonsandrobertsons/suttons-robertsons-private`.

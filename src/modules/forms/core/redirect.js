@@ -2,8 +2,6 @@
 //
 // These do not submit to Webflow. They collect answers and navigate, carrying
 // the answers as URL params for the destination form to prefill.
-//
-// Split out of conditions.js on 9 Sep 2026.
 
 import { SELECTORS, formConfig } from './shared.js';
 import { formDom } from './dom.js';

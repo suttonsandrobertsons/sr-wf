@@ -4,14 +4,12 @@ import { describe, expect, it } from 'vitest'
 import { formSubmitValues } from '../submit-values/index.js'
 import { submittedFields } from './helpers/webflow-submit.js'
 
-// Covers the case where a rule DECLINES to answer while a same-named Designer
-// input is on the page. The rule must still rename it, or Webflow collapses the
-// duplicates to the last in document order and Zoho gets a wrong value instead
-// of none. A first version skipped that and shipped the bug.
+// A rule that declines to answer must still rename a same-named Designer
+// input, or Webflow keeps the last duplicate and Zoho gets a wrong value
+// instead of none.
 //
-// The eleven inputs this was written for were deleted on 10 Sep 2026, so these
-// no longer describe the live pages. They are kept deliberately: the renaming
-// is what makes re-adding one harmless, and nothing else asserts it.
+// Those Designer inputs are no longer on the pages. These tests stay because
+// the renaming is what makes re-adding one harmless.
 describe('submit-values owns its field names', () => {
   const boot = (html) => {
     document.body.innerHTML = `<form data-form="quote">${html}</form>`
@@ -24,11 +22,9 @@ describe('submit-values owns its field names', () => {
     <input type="hidden" name="box_and_papers" value="Original Papers Only" data-form-show-if="original_box=no; original_paperwork=yes">
     <input type="hidden" name="box_and_papers" value="None" data-form-show-if="original_box=no; original_paperwork=no">`
 
-  it('sends no key when the questions are not asked, despite the legacy inputs', () => {
-    // get-a-quote shows box/papers for some asset types only. An intermediate
-    // version written earlier today sent box_and_papers = "None" for every
-    // other lead, mapped to two Zoho picklists. The DEPLOYED bundle does not:
-    // its dedup renames all four, so the key is absent.
+  it('sends no key when the questions are not asked, despite same-named inputs', () => {
+    // get-a-quote asks box/papers for some asset types only. Other leads send
+    // no box_and_papers key, rather than "None".
     const root = boot(LEGACY_BOX)
     formSubmitValues.apply(root)
 
@@ -74,15 +70,9 @@ describe('submit-values owns its field names', () => {
   })
 
   it('never renames its own hidden, however many times apply runs', () => {
-    // Live payloads contain _disabled_New_Lead_Type even though no page authors
-    // the field. Cause: it was in chooseOneFieldNames, so a render pass between
-    // two applies renamed the rule's own hidden and the next apply made a fresh
-    // one. Removing it from that list is the actual fix; the
-    // data-form-owned-value stamp is the belt-and-braces.
-    //
-    // This test does NOT run a render pass, so it would not catch the name
-    // being re-added to chooseOneFieldNames. It only proves apply() alone is
-    // idempotent.
+    // New_Lead_Type is kept out of chooseOneFieldNames so a render pass cannot
+    // rename the rule's own hidden input; data-form-owned-value marks it too.
+    // No render pass runs here: this only proves apply() is idempotent.
     const root = boot(`<input type="radio" name="enquiry_type" value="Consignment" checked>`)
     formSubmitValues.apply(root)
     formSubmitValues.apply(root)
@@ -95,12 +85,10 @@ describe('submit-values owns its field names', () => {
   })
 
   it('keeps a home-visit drop-off at 15, as the Designer rows did', () => {
-    // Row order, not a real customer path: appointment_sub_type is
-    // condition-hidden for a home visit (its rule is
-    // "appointment_type != Home visit or private office"), so get() skips it
-    // and a live home visit resolves to 60 under both mechanisms. Kept
-    // because it pins the FIRST-MATCH ordering — checking home-visit first
-    // would return 60 here and silently change the two reachable rows.
+    // Pins first-match row order, not a customer path: appointment_sub_type
+    // is condition-hidden for a home visit, so a real home visit resolves to
+    // 60 either way. Checking home visit first would change the two reachable
+    // rows.
     const root = boot(`
       <input type="radio" name="appointment_type" value="Home visit or private office" checked>
       <input type="radio" name="appointment_sub_type" value="Drop off (15 minutes)" checked>`)

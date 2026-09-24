@@ -138,7 +138,7 @@ export const formDom = {
 
     // Stamps the owning element AND every descendant. Required: CSS styling
     // selectors target `data-form-state` on descendant nodes, not only the
-    // owner, so styling breaks if `applyState(element)` alone is called.
+    // owner, so `applyState(element)` alone is not enough.
     applyState(element);
     element.querySelectorAll('*').forEach(applyState);
   },
@@ -189,5 +189,3 @@ export const formDom = {
     if (error) error.textContent = '';
   },
 };
-
-// `formValues`, which used to follow this line, now lives in fields.js.

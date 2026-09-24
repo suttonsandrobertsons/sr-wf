@@ -12,7 +12,7 @@ function submitEvent() {
   return new Event('submit', { bubbles: true, cancelable: true })
 }
 
-describe('validation skips CSS-hidden fields (Fix #4)', () => {
+describe('validation skips CSS-hidden fields', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
   })
@@ -63,7 +63,7 @@ describe('validation skips CSS-hidden fields (Fix #4)', () => {
   })
 })
 
-describe('handleSubmit robustness (Fix #1 + #3)', () => {
+describe('handleSubmit robustness', () => {
   beforeEach(() => {
     document.body.innerHTML = `<form data-form="quote"></form>`
   })

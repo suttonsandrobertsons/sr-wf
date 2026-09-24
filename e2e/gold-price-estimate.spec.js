@@ -35,7 +35,7 @@ async function pick(page, scope, value) {
   }, { scope, value });
 }
 
-// One 15 g 18ct jewellery item, the same as the golden lead in the twins.
+// One 15 g 18ct jewellery item, a standard reference lead.
 async function priceOneItem(page, enquiry) {
   if (enquiry) await pick(page, '[data-form="gold"]', enquiry);
   await pick(page, '[data-form="gold"] [data-form-gold-item]', "jewellery");

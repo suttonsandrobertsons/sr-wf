@@ -347,7 +347,6 @@ async function initializeMap(container) {
 
 		map.setOptions({
 			gestureHandling: "greedy",
-			// disableDefaultUI: true,
 		});
 
 		subscribeToCapabilityChanges(pins, mapElement, map);

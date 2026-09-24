@@ -9,9 +9,8 @@ describe('email validator', () => {
     expect(fieldValidators.email('  jo@example.com  ')).toBe(true) // trimmed before test
   })
 
-  // The bug that broke the Zapier -> Zoho create: a trailing dot passed the old
-  // loose regex, then Zoho's email field rejected it and the lead was lost.
-  it('rejects a trailing dot (the Zoho-reject case)', () => {
+  // Zoho's email field rejects a trailing dot, so the form must too.
+  it('rejects a trailing dot (Zoho would reject it)', () => {
     expect(fieldValidators.email('jo@example.com.')).toBe(false)
   })
 

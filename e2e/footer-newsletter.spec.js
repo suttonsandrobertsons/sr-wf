@@ -11,9 +11,7 @@ test.describe("footer newsletter validation", () => {
 
     await form.locator('[type="submit"]').first().click();
 
-    // The form engine flags the field invalid and the Webflow success block
-    // must stay hidden. Assert both signals (either is sufficient proof it
-    // was blocked, but we check the success message never appears).
+    // The field is flagged invalid and the success block stays hidden.
     await expect(form.locator(".w-form-done")).toBeHidden();
     const flaggedInvalid = await email.evaluate(
       (el) =>
@@ -31,8 +29,7 @@ test.describe("footer newsletter validation", () => {
     const form = page.locator('[data-form="footer-form"], #footer-form').first();
     const email = form.locator('input[name="email"]');
     await email.fill("valid.person@example.com");
-    // Do NOT submit (would subscribe a real address). Just assert the value is
-    // accepted as structurally valid client-side.
+    // Not submitted, as that would subscribe a real address.
     const valid = await email.evaluate((el) => el.checkValidity());
     expect(valid).toBe(true);
   });

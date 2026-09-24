@@ -94,9 +94,9 @@ describe("contact-widget", () => {
 		expect(text).toContain(window.location.href.split("?")[0]);
 		expect(text).toContain("Hello");
 
-		// Message order: URL first, "Hello" last. Any
-		// UTM corruption WhatsApp introduces by absorbing the trailing greeting
-		// is neutralised on landing by sanitizeUtmValue (see conditions.js).
+		// Message order: URL first, "Hello" last. If WhatsApp carries the
+		// greeting into the URL, sanitizeUtmValue strips it on landing (see
+		// conditions.js).
 		const lines = text.split("\n").filter(Boolean);
 		expect(lines[0].startsWith("http")).toBe(true);
 		expect(lines[lines.length - 1]).toBe("Hello");

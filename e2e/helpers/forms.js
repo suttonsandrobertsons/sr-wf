@@ -1,19 +1,14 @@
-// Shared helpers for driving the live multi-step forms in smoke tests.
+// Shared helpers for driving the published multi-step forms in smoke tests.
 //
-// These specs run against the PUBLISHED site, so the one hard rule is that they
-// must never create a real lead: installSubmitCapture() intercepts the Webflow
-// form endpoint, records the payload and answers 200 itself, so the form behaves
-// as though it submitted while nothing reaches Webflow, Zapier or Zoho.
+// These specs never create a real lead: installSubmitCapture() intercepts the
+// Webflow form endpoint, records the payload and answers 200, so nothing
+// reaches Webflow, Zapier or Zoho.
 
 const FORM_ENDPOINT = "**/api/v1/form/**";
 
-// Where a captured payload is written for the twins to resolve.
-//
-// These specs produce the one thing the private repo's Zapier twin cannot make
-// for itself: a payload from the REAL published form, with real CMS options and
-// the real serialiser. The twin then answers "what would Zoho store?" without
-// anyone submitting a lead. See tools/twins/chain/__tests__/live-capture.test.js
-// in the private repo, which is skipped when this directory is empty.
+// Where a captured payload is written: a real published-form payload, with
+// real CMS options and serialiser, for checking what Zoho would store without
+// submitting a lead.
 const CAPTURE_DIR = process.env.SR_CAPTURE_DIR
   || new URL("../.captures/", import.meta.url).pathname;
 
@@ -48,7 +43,7 @@ export async function installSubmitCapture(page) {
       return out;
     },
     /**
-     * Write the captured payload for the twins, flattened to Zapier's shape.
+     * Write the captured payload, flattened to Zapier's shape.
      *
      * Zapier receives one value per key, so duplicates collapse the way
      * Webflow's serialiser leaves them: last in DOM order wins.
@@ -70,8 +65,8 @@ export async function installSubmitCapture(page) {
       return flat;
     },
 
-    // Single value for a field, or null. Fails loudly on duplicates so a
-    // regression that submits two values under one name can't read as a pass.
+    // Single value for a field, or null. Throws on duplicates, so two values
+    // under one name cannot pass.
     one: (map, name) => {
       const values = map[name];
       if (!values) return null;

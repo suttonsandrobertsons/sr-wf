@@ -1,17 +1,15 @@
 import { test, expect } from "@playwright/test";
 import { pickRadio, fieldState, LEAD_FORMS, installSubmitCapture, fillAndSubmit } from "./helpers/forms.js";
 
-// No REAL submissions here. installSubmitCapture intercepts Webflow's form
-// endpoint and answers 200 itself, so a payload can be asserted without a lead
-// ever reaching Webflow, Zapier or Zoho.
+// Nothing is submitted: installSubmitCapture answers Webflow's form endpoint
+// itself, so no lead reaches Webflow, Zapier or Zoho.
 
 const ENQUIRY_FORMS = LEAD_FORMS;
 
-// enquiry_consider_consignment was deleted from the gold calculator only
-// (869eu8kr1, 9 Sep 2026) — three Designer instances: /gold-loans/calculator,
-// /sell-gold/calculator and /dev/forms/gold-calculator. Every other lead form
-// still asks it, and the shared form_radio-group component is untouched, so
-// the retention below is as much the point of these tests as the removal.
+// Since 9 Sep 2026 only the gold calculator (/gold-loans/calculator,
+// /sell-gold/calculator, /dev/forms/gold-calculator) omits
+// enquiry_consider_consignment. Every other lead form still asks it, and both
+// sides are checked.
 const asksConsignment = (key) => key !== "gold";
 const followUpsFor = (key) =>
   asksConsignment(key)
@@ -27,8 +25,8 @@ test.describe("enquiry question — shape on every lead form", () => {
       expect(enquiry.present).toBe(true);
       expect(enquiry.values).toEqual(["Loan", "Sell My Items"]);
       expect(enquiry.required).toBe(true);
-      // Consignment / Unknown were removed from the CMS — they must not survive
-      // anywhere, or the old dead conditionals could come back to life.
+      // Consignment / Unknown are no longer CMS options; they must not appear,
+      // or conditions keyed on them would act again.
       expect(enquiry.values).not.toContain("Consignment");
       expect(enquiry.values).not.toContain("Unknown");
     });
@@ -43,10 +41,9 @@ test.describe("enquiry question — shape on every lead form", () => {
       await page.goto(path);
       const consignment = await fieldState(page, key, "enquiry_consider_consignment");
 
-      // Deleted, not hidden: the field carries data-form-field-required, and a
-      // required control that is present but invisible can stop step 1 from
-      // validating at all. Absent also makes deriveNewLeadType drop
-      // "Consignment Customer" on its own, with no JS change.
+      // Absent, not hidden: a required control that is present but invisible
+      // can stop step 1 validating. Absent also means deriveNewLeadType leaves
+      // out "Consignment Customer".
       expect(consignment.present).toBe(asksConsignment(key));
     });
 
@@ -81,15 +78,15 @@ test.describe("courier — transact question removed, pack size retained", () =>
       await page.goto(path);
       const option = await fieldState(page, "courier", "courier_option");
 
-      // Exactly one control, carrying Zoho's own Fullfillment value. More than
-      // one would be a real bug: courier_option is not in chooseOneFieldNames,
-      // so there is no dedup safety net to pick a winner.
+      // Exactly one control, carrying Zoho's own Fullfillment value.
+      // courier_option is not in chooseOneFieldNames, so nothing would pick a
+      // winner between two.
       expect(option.present).toBe(true);
       expect(option.count).toBe(1);
       expect(option.values).toEqual(["Special Delivery Pack"]);
       expect(option.visible, "the question is removed from view").toBe(false);
 
-      // The old three choices must be gone.
+      // The three earlier choices are gone.
       expect(option.values).not.toContain("Special Delivery Label");
       expect(option.values).not.toContain("Discussing My Options");
     });
@@ -155,20 +152,12 @@ test.describe("gold calculator — enquiry still drives the quote basis", () => 
 });
 
 test.describe("box_and_papers — computed in code, not authored", () => {
-  // The four same-named Designer inputs were deleted on 10 Sep 2026, after the
-  // bundle carrying computeBoxAndPapers went live. This replaced the
-  // deployment-order guard that watched for exactly that moment.
+  // box_and_papers is computed by computeBoxAndPapers, not Designer inputs.
   //
-  // WHY THE PAYLOAD IS NOT ASSERTED HERE. box_and_papers exists only on
-  // get-a-quote, and that form cannot be submitted in a smoke test: step 3
-  // carries two REQUIRED uploads, so reaching submit means POSTing real files
-  // to the Cloudflare Worker on every run. The payload is covered instead by
-  // __tests__/submit-values-ownership.test.js, which runs the rule through the
-  // faithful port of Webflow's serialiser, including the answered case and the
-  // never-asked case.
-  //
-  // What only a live page can prove is below: that the authored inputs are
-  // really gone, and that the radios the rule reads are really still there.
+  // The payload is not asserted here: get-a-quote's step 3 needs two real
+  // uploads to reach submit. __tests__/submit-values-ownership.test.js covers
+  // the payload. This checks what only the published page can: the inputs are
+  // gone and the radios the rule reads are present.
 
   test("the authored inputs are gone and the rule's sources remain", async ({ page }) => {
     await page.goto("/get-a-quote");
@@ -188,23 +177,19 @@ test.describe("box_and_papers — computed in code, not authored", () => {
     expect(counts.authored, "no authored box_and_papers input may exist").toBe(0);
     expect(counts.renamed, "nor a renamed leftover from the old dedup").toBe(0);
 
-    // Delete these by accident and the rule silently returns null forever.
+    // Without these radios the rule always returns null.
     expect(counts.original_box).toBeGreaterThan(0);
     expect(counts.original_paperwork).toBeGreaterThan(0);
   });
 
   test("asks the box and papers questions only for the asset types that have them", async ({ page }) => {
-    // The rule's isAnswered guard depends on these being condition-hidden for
-    // every other asset type. If they ever showed for Gold, a gold lead would
-    // start carrying box_and_papers.
+    // The rule's isAnswered check relies on these being condition-hidden for
+    // other asset types, so a gold lead carries no box_and_papers.
     await page.goto("/get-a-quote");
 
-    // conditionHidden, not visible. These radios live on step 2 while
-    // asset_type is on step 1, so offsetParent is null for both answers and a
-    // visibility assertion passes for the wrong reason. conditionHidden is the
-    // conditions engine's own verdict and is independent of which step is open.
-    //
-    // Polled because the engine runs off a change event and takes a beat.
+    // conditionHidden, not visibility: these radios are on step 2 and
+    // asset_type on step 1, so both would read as not visible. conditionHidden
+    // does not depend on the open step. Polled because it updates on change.
     const boxHidden = () =>
       fieldState(page, "get-a-quote", "original_box").then((s) => s.conditionHidden);
 

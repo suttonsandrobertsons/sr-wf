@@ -1,6 +1,6 @@
 // Price estimate PDF — the gold calculator's "Download price estimate" link.
 //
-// The PDF is made by the suttons-quote Worker (private repo, quote/). This file
+// The PDF is made by the suttons-quote Worker. This file
 // only gathers what the page shows into one string, `d`, and hands it over:
 //
 //   on click   the link opens WORKER/quote?d=... in a new tab (a Designer

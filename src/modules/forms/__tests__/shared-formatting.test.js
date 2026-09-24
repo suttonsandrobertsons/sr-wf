@@ -19,9 +19,8 @@ describe('calculator display formatting', () => {
   })
 
   it('gold and loan rate cards agree at the shared £15,000 ceiling (loan.max)', () => {
-    // Both calculators price the same rate card; a value at loan.max must be
-    // quotable, not "above max", in both — they previously disagreed here
-    // (gold used maxExclusive:15000, loan used maxInclusive:15000).
+    // Both calculators share one rate card, so a value at loan.max is quotable,
+    // not "above max", in both.
     expect(formConfig.loan.max).toBe(15000)
     expect(getRateBand(15000, formConfig.gold.rateBands)).toMatchObject({ interestRate: 6.0 })
     expect(getRateBand(15000, formConfig.loan.rateBands)).toMatchObject({ interestRate: 6.0 })

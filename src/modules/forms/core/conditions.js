@@ -1,11 +1,10 @@
 // Show-if / hide-if evaluation.
 //
-// Was 1839 lines holding six unrelated concerns; split 9 Sep 2026. The others
-// are ./navigation.js (steps and URL params), ./attribution.js, ./redirect.js
-// and ./success-page.js.
+// Related: ./navigation.js (steps and URL params), ./attribution.js,
+// ./redirect.js and ./success-page.js.
 //
-// `hide-if` is fully supported but has no known use in the Designer — it was
-// added for symmetry with `show-if`. Do not assume a rule uses it.
+// `hide-if` is supported for symmetry with `show-if` but has no known use in
+// the Designer.
 
 import { SELECTORS } from './shared.js';
 import { formDom } from './dom.js';
@@ -111,8 +110,8 @@ export const formConditions = {
     return String(ruleList || '')
       .split(';')
       .flatMap((segment) => {
-        // A plain split on "," breaks a value containing a comma (e.g. "Hello,
-        // world"). Split only where the comma starts a new rule (a negation,
+        // A plain split on "," would cut a value containing a comma (e.g.
+        // "Hello, world"). Split only where the comma starts a new rule (a negation,
         // or a field name plus operator) — see getRules tests for the cases
         // that must not split.
         return segment.split(/,(?=\s*(?:![a-zA-Z_][a-zA-Z0-9_-]*\s*(?:,|$)|[a-zA-Z_][a-zA-Z0-9_-]*\s*(?:>=|<=|!=|=|>|<)))/);
@@ -220,7 +219,3 @@ export const formConditions = {
     });
   },
 };
-
-// ============================================================================
-// STEPS NAVIGATION
-// ============================================================================

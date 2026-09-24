@@ -35,8 +35,8 @@ test.describe("phone country-code dropdown (CMS-driven)", () => {
     const values = await optionsLocator(page).evaluateAll((os) =>
       os.map((o) => o.getAttribute("data-form-select-option"))
     );
-    // Duplicate values would collide the option ids and make selection
-    // ambiguous — this guards any future CMS addition of a shared dial code.
+    // Duplicate values would collide option ids and make selection ambiguous,
+    // e.g. if a shared dial code is added in the CMS.
     expect(new Set(values).size).toBe(values.length);
   });
 

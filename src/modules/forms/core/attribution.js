@@ -5,10 +5,8 @@
 // resort, so a blocked storage API degrades rather than throws. Values expire
 // after 30 days without a fresh UTM.
 //
-// Split out of conditions.js on 9 Sep 2026.
-//
-// `brand` here is the quote_url coalescing, NOT the combined `brands` field
-// built by formFieldGroups in aggregate.js. The two have been confused before.
+// `brand` here is the quote_url coalescing, not the combined `brands` field
+// built by formFieldGroups in aggregate.js.
 
 import { formConfig, buildPhoneValue } from './shared.js';
 import { formLogger } from './dom.js';
@@ -33,13 +31,11 @@ export const SUCCESS_SNAPSHOT_MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
 // Tracking keys that must never contain whitespace/control chars.
 const TRACKING_VALUE_KEYS = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'gclid', 'fbclid'];
 
-// A valid UTM/click-id value never contains whitespace. WhatsApp (and some
-// email clients) auto-link and greedily absorb trailing text — a "Hello"
-// placed after the link turns `utm_medium=direct` into `direct Hello`.
-// Uncaught, this corruption flows into storage, hidden fields, the dataLayer
-// push, redirect params and the WhatsApp link itself, all the way to Zoho.
-// Normalise control chars to spaces, trim, then keep only the first token —
-// this single choke point cleans both inbound and already-persisted values.
+// A valid UTM/click-id value never contains whitespace, but WhatsApp and some
+// email clients auto-link and absorb trailing text, turning
+// `utm_medium=direct` into `direct Hello`. Normalise control chars to spaces,
+// trim, then keep only the first token. Used on capture and on read, so
+// stored values are cleaned too.
 function sanitizeUtmValue(v) {
   return String(v ?? '').replace(/[\u0000-\u0020]+/g, ' ').trim().split(/\s+/)[0] || '';
 }
@@ -64,8 +60,7 @@ function writeCookie(name, value, days = 30) {
   if (typeof document === 'undefined') return false;
   try {
     const expires = new Date(Date.now() + days * 864e5).toUTCString();
-    // Secure: the site is HTTPS-only, so restrict the cookie to secure
-    // transport (defence-in-depth against attribution leaking over plain HTTP).
+    // Secure: the site is HTTPS-only.
     document.cookie = `${name}=${encodeURIComponent(value)};expires=${expires};path=/;SameSite=Lax;Secure`;
     return true;
   } catch {
@@ -75,7 +70,6 @@ function writeCookie(name, value, days = 30) {
 
 // Attribution capture and the form_submission dataLayer push are not gated
 // here; consent is enforced upstream (Consent Pro + Google Consent Mode).
-// Consent posture and rationale are kept in an internal note (not committed).
 
 // Infer UTM-equivalent source/medium when no paid/UTM signals are present.
 function inferUntrackedAttribution() {
@@ -109,7 +103,7 @@ function inferUntrackedAttribution() {
 export const formAttribution = {
   // Exposed so callers reading UTM values from a source that bypasses the
   // store (e.g. the contact widget's raw-URL fallback) can apply the same
-  // whitespace-corruption guard used at the capture/read choke point.
+  // whitespace cleaning used on capture and read.
   sanitizeUtmValue,
 
   capture() {
@@ -300,12 +294,10 @@ export const formAttribution = {
     const firstPage = attribution.first_page || attribution.first_landing_url || this.cleanUrl(window.location.href);
     const lastPage = this.cleanUrl(window.location.href);
 
-    // CAPTURED fields, not derived ones — see the four kinds in SIMPLE.md.
-    // Every value below comes from the browser or the stored session, so none of
-    // it can be authored in the Designer or asserted from markup: it does not
-    // exist until a real visit. These names are the Zapier contract just as much
-    // as the gold_* ones, so renaming one silently stops attribution reaching
-    // Zoho rather than throwing.
+    // Captured, not derived: every value below comes from the browser or the
+    // stored session, so none of it can be authored in the Designer. These
+    // names are mapped in Zapier like the gold_* ones; renaming one stops that
+    // value reaching Zoho without any error.
     formValues.setHidden(root, 'current_url', lastPage);
     formValues.setHidden(root, 'first_landing_url', firstPage);
     formValues.setHidden(root, 'first_page', firstPage);
@@ -458,14 +450,12 @@ export const formAttribution = {
     const valueFor = (names) => this.getFieldValue(form, names);
 
     // Snapshot carries only: (a) what a TY page can render — `reference`, plus
-    // the structural `form`/`enquiry_type`/`asset_type` keys `getSuccessData`
-    // surfaces (see docs/developer/thank-you-outputs.md in the private repo);
+    // the `form`/`enquiry_type`/`asset_type` keys `getSuccessData` surfaces;
     // and (b) `email`/`phone` for the `form_submission` dataLayer push, which
-    // fires on TY load (`trackSuccess`) because a native POST races unload and
-    // loses the pre-handoff push. `unique_id`/`form_category` derive on the TY
-    // page from `reference`/`form`; UTM/gclid/fbclid come from `sr_attribution`
-    // instead. All other PII (appointment/amount/contact_method/item_type/
-    // brand/courier_*) is deliberately dropped.
+    // fires on TY load (`trackSuccess`) because a native POST can unload the
+    // page before an earlier push is sent. `unique_id`/`form_category` derive
+    // on the TY page from `reference`/`form`; UTM/gclid/fbclid come from
+    // `sr_attribution`. All other personal data is deliberately left out.
     const snapshot = {
       reference,
       form: form.key,
@@ -501,8 +491,7 @@ export const formAttribution = {
       const raw = storage.getItem(formConfig.attribution.storageKey);
       if (raw) {
         const parsed = JSON.parse(raw);
-        // Defensive sanitize on read: cleans any UTM value that was persisted
-        // corrupted before this fix shipped, so no stale value can leak out.
+        // Sanitise on read too, so a value stored before cleaning is not reused.
         if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) return sanitizeTrackingValues(parsed);
         console.warn('[Suttons Attribution] Corrupt attribution data in storage, resetting.');
       }

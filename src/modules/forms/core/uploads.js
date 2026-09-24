@@ -1,18 +1,12 @@
 // File uploads: pick, validate, POST to the Cloudflare Worker, and route the
 // returned URL into the field that submits.
 //
-// Split out of fields.js on 10 Sep 2026. 562 lines of HTTP client — XHR with
-// progress, abort and supersession, MIME sniffing, R2 URLs — is not what
-// anyone expects to find in a file called "fields".
-//
 // The Worker is suttons-form-helper. It gates on the X-Suttons-Client header,
 // which is public (it ships in the bundle) and is a bot filter, not auth.
 //
-// One import cycle survives the split and predates it:
-// fields -> uploads -> navigation -> fields. Every edge is dereferenced inside
-// a method, never at module scope, so ESM resolves it. Closing it means moving
-// getFieldKey and validateScope out of formFields, which is a larger change
-// than it is worth.
+// Import cycle: fields -> uploads -> navigation -> fields. Every edge is
+// dereferenced inside a method, never at module scope, so ESM resolves it.
+// Keep it that way.
 
 import { SELECTORS, formConfig, isEnabledAttribute } from './shared.js';
 import { formLogger, formDom } from './dom.js';
@@ -23,9 +17,9 @@ import { setFilled } from './field-state.js';
 
 export const formUploads = {
   tempInputs: new WeakMap(),
-  // Per-widget nonce: each new file selection bumps the token so a slower prior
-  // request (e.g. file A) can be detected as stale and ignored when it finally
-  // resolves — it must never overwrite the value written by a newer file (B).
+  // Per-widget nonce: each new file selection bumps the token so a slower
+  // earlier request is ignored when it resolves and cannot overwrite a newer
+  // file's value.
   uploadTokens: new WeakMap(),
   // The AbortController for the in-flight request per widget, so a new selection
   // can abort the previous one instead of racing it.
@@ -225,10 +219,8 @@ export const formUploads = {
     const controller = { abort: () => {} };
     this.uploadControllers.set(upload, controller);
 
-    // Live upload progress: fetch has no upload-progress events, so a large file
-    // (e.g. a 20MB video) would sit on a static "Uploading…" for many seconds and
-    // look frozen. XHR updates the loading label with a percentage as the bytes
-    // go out. Guard on isStale so a superseded upload never touches the UI.
+    // Show a percentage while bytes go out so a large file (e.g. a 20MB video)
+    // doesn't look stuck. A superseded upload never touches the UI.
     const onProgress = (event) => {
       if (isStale()) return;
       if (event && event.lengthComputable && event.total > 0) {
@@ -250,18 +242,15 @@ export const formUploads = {
         reference: formAttribution.ensureReference(form),
       }, controller, onProgress);
 
-      // A newer selection superseded this request while it was in flight — its
-      // result is stale, so ignore it entirely and never write over the newer
-      // file's value/UI.
+      // Superseded by a newer selection: ignore the result.
       if (isStale()) {
         formLogger.log(form, 'Ignoring stale upload completion (superseded by a newer selection).', { name: file.name });
         return;
       }
 
       const url = json.url || json.fileUrl || '';
-      // A 200 with no usable URL (e.g. a body that parsed to an object without a
-      // url) must not be treated as success — surface the error state instead of
-      // silently writing an empty value that would pass validation.
+      // A 200 with no usable URL is an error, not an empty value that would
+      // pass validation.
       if (!url) {
         const friendly = new Error(this.friendlyUploadError('upload_failed'));
         friendly.code = 'empty_url';
@@ -335,10 +324,7 @@ export const formUploads = {
 
     const url = workerBase.replace(/\/$/, '') + formConfig.uploads.workerUploadPath;
 
-    // XMLHttpRequest, not fetch, so xhr.upload.onprogress can drive a live
-    // percentage while bytes go out: supersede via controller.abort → xhr.abort,
-    // a 60s cap via xhr.timeout, a hard throw on an unparseable 2xx body, and
-    // the same Worker error-code surfacing.
+    // XMLHttpRequest, not fetch: fetch has no upload-progress events.
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
 
@@ -356,8 +342,7 @@ export const formUploads = {
         return;
       }
 
-      // ~60s cap, equivalent to the old fetch timeout. xhr fires ontimeout and
-      // aborts internally; no manual timer to clear.
+      // 60s cap. xhr fires ontimeout and aborts internally; no timer to clear.
       xhr.timeout = 60000;
       xhr.setRequestHeader(formConfig.uploads.clientHeaderName, formConfig.uploads.clientHeaderValue);
 
@@ -424,8 +409,7 @@ export const formUploads = {
       };
 
       xhr.onabort = () => {
-        // A supersede-triggered abort must surface as AbortError so the caller's
-        // stale check stays silent (matching the old fetch AbortController path).
+        // A supersede abort surfaces as AbortError so the caller stays silent.
         const abortError = new Error('Upload aborted.');
         abortError.name = 'AbortError';
         reject(abortError);
@@ -467,14 +451,12 @@ export const formUploads = {
     setFilled(valueField);
   },
 
-  // WHY TWO VALUE FIELDS: Zoho has TWO distinct upload fields with different
-  // format acceptance — Image Upload (jpg/png only, 10 MB cap) and File Upload
+  // Two value fields: Zoho has two upload fields with different format
+  // acceptance — Image Upload (jpg/png only, 10 MB cap) and File Upload
   // (everything else, including video). Zapier maps each to its own Zoho field
-  // with no branching, which only works if the browser has already sorted the
-  // URL into the right box.
+  // with no branching, so the browser sorts the URL into the right one.
   //
-  // Images
-  // (incl. WebP/HEIC/HEIF converted to JPEG) go to the primary value field
+  // Images (incl. WebP/HEIC/HEIF converted to JPEG) go to the primary value field
   // (→ Zoho Image Upload); documents and videos go to the file value field
   // (→ Zoho File Upload). If a widget has no dedicated file target, everything
   // falls back to the primary field. The non-matching field is always cleared so

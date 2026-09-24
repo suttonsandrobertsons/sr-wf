@@ -35,15 +35,10 @@ function doRefresh(form) {
   const amount = getAmount(form);
   const months = getDuration(form);
 
-  // formValues.setHidden is the one find-or-create-hidden helper. loan.js had
-  // its own copy of it until 9 Sep 2026.
-  // setHidden looks up `input[name=...]`. The inline version this replaced
-  // looked up `[name=...]`, any tag. Equivalent on the live loan calculator,
-  // where all five of these are hidden inputs it creates itself — but add a
-  // <select> named one of them and setHidden will append a SECOND control
-  // rather than setting it, and Webflow's last-in-DOM-wins decides which
-  // value submits. `requested_amount` is already a <select> on the
-  // product-finder form, which loan.js does not touch.
+  // setHidden matches `input[name=...]` only. A <select> with one of these
+  // names would get a second control appended beside it, and Webflow submits
+  // the last one in the DOM. (`requested_amount` is a <select> on the
+  // product-finder form, which loan.js does not touch.)
   const setField = (name, value) => formValues.setHidden(form, name, String(value));
 
   if (!Number.isFinite(amount) || amount <= 0) {
