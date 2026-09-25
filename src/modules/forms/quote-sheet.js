@@ -18,8 +18,9 @@
 // panel is showing, so its show-if rules (Loan: loan only, Sell: both, not yet
 // chosen: price of your gold today) decide the sheet too. Nothing is priced here.
 //
-// Link visibility is Designer-only. The link's wrapper is hidden for now
-// (24 Sep 2026); the thank-you page offers the PDF instead (core/success-page.js).
+// Link visibility is Designer-only. The link's wrapper has u-display-none for
+// now (24 Sep 2026); the thank-you page offers the PDF instead, through
+// data-form-success-link="quote_pdf_url" (core/success-page.js).
 // Its show-if "gold_purchase_total > 0" stays, for when it is shown again.
 
 import { formConfig } from "./config.js";

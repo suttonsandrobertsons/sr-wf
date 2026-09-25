@@ -11,8 +11,8 @@ export const formSuccessPage = {
 
   outputSelector: '[data-form-success-output]',
   fieldSelector: '[data-form-success-field]',
-  quoteLinkSelector: '[data-form-success-quote-link]',
-  quoteAltSelector: '[data-form-success-quote-alt]',
+  linkSelector: '[data-form-success-link]',
+  showIfSelector: '[data-form-success-show-if]',
 
   shouldScrollToTop() {
     if (typeof window === 'undefined') return false;
@@ -45,31 +45,33 @@ export const formSuccessPage = {
     window.requestAnimationFrame?.(scrollTop);
   },
 
+  // Outputs take the value as text, and their row shows only with a value.
+  // Links take it as their href (on the element, or the first link inside it,
+  // as a Button instance carries its attribute on its root). show-if="key"
+  // shows an element only when the key has a value, show-if="!key" only when
+  // it has none.
   hydrateOutputs(scope = document) {
-    this.showQuoteLink(scope);
     const outputs = Array.from(scope.querySelectorAll(this.outputSelector));
-    if (!outputs.length) return;
+    const links = Array.from(scope.querySelectorAll(this.linkSelector));
+    const conditions = Array.from(scope.querySelectorAll(this.showIfSelector));
+    if (!outputs.length && !links.length && !conditions.length) return;
 
     const data = this.getSuccessData();
     outputs.forEach((output) => {
-      const key = output.getAttribute('data-form-success-output');
-      const value = this.formatValue(data[key]);
-      const row = output.closest(this.fieldSelector);
-
-      if (value) {
-        output.textContent = value;
-        row?.removeAttribute('hidden');
-        row?.removeAttribute('aria-hidden');
-        row?.style?.removeProperty('display');
-        return;
-      }
-
-      output.textContent = '';
-      if (row) {
-        row.hidden = true;
-        row.setAttribute('aria-hidden', 'true');
-        row.style?.setProperty('display', 'none');
-      }
+      const value = this.formatValue(data[output.getAttribute('data-form-success-output')]);
+      output.textContent = value;
+      this.showRow(output.closest(this.fieldSelector), Boolean(value));
+    });
+    links.forEach((el) => {
+      const value = this.formatValue(data[el.getAttribute('data-form-success-link')]);
+      const link = el.matches('a') ? el : el.querySelector('a');
+      if (value && link) link.href = value;
+    });
+    conditions.forEach((el) => {
+      const rule = el.getAttribute('data-form-success-show-if').trim();
+      const negate = rule.startsWith('!');
+      const has = Boolean(this.formatValue(data[rule.replace(/^!\s*/, '')]));
+      this.showRow(el, negate ? !has : has);
     });
 
     // Not cleared here: trackSuccess runs right after hydrate in boot() and
@@ -77,24 +79,19 @@ export const formSuccessPage = {
     // the snapshot only after the push has read it.
   },
 
-  // Gold thank-you page: after an instant quote, the Download quote wrapper
-  // (hidden in the Designer) takes the place of the Get another quote wrapper,
-  // and its link opens the same PDF the Zoho lead links to. Otherwise the page
-  // is left as built. Wrappers, as a Button instance takes no attributes.
-  showQuoteLink(scope = document) {
-    const wraps = Array.from(scope.querySelectorAll(this.quoteLinkSelector));
-    if (!wraps.length) return;
-    const params = new URLSearchParams(window.location.search || '');
-    const reference = params.get('Reference') || params.get('reference') || params.get('ref') || '';
-    const url = this.readStoredSnapshot(reference).quote_pdf_url;
-    if (!url) return;
-
-    wraps.forEach((wrap) => {
-      const link = wrap.matches('a') ? wrap : wrap.querySelector('a');
-      if (link) link.href = url;
-      wrap.removeAttribute('hidden');
-    });
-    scope.querySelectorAll(this.quoteAltSelector).forEach((alt) => alt.setAttribute('hidden', ''));
+  // A row may start with u-display-none, so it doesn't flash before this runs.
+  showRow(row, visible) {
+    if (!row) return;
+    if (visible) {
+      row.classList.remove('u-display-none');
+      row.removeAttribute('hidden');
+      row.removeAttribute('aria-hidden');
+      row.style?.removeProperty('display');
+      return;
+    }
+    row.hidden = true;
+    row.setAttribute('aria-hidden', 'true');
+    row.style?.setProperty('display', 'none');
   },
 
   // Fires the authoritative `form_submission` push from the stored snapshot,
@@ -166,6 +163,8 @@ export const formSuccessPage = {
       form: params.get('form') || stored.form || '',
       enquiry_type: params.get('enquiry_type') || stored.enquiry_type || '',
       asset_type: params.get('asset_type') || stored.asset_type || '',
+      // Snapshot only: a link from the URL could point anywhere.
+      quote_pdf_url: stored.quote_pdf_url || '',
     };
   },
 

@@ -1003,39 +1003,40 @@ describe('personal data and cookies', () => {
     }
   })
 
-  it('shows Download quote in place of Get another quote when the snapshot has a PDF', () => {
-    const page = (snapshot) => {
+  it('shows Download quote after an instant quote, and Get another quote otherwise', () => {
+    const page = (snapshot, search = '?form=gold&Reference=DEV-7BKG-YEY4') => {
       window.sessionStorage.clear()
       if (snapshot) {
         window.sessionStorage.setItem('sr_form_success_DEV-7BKG-YEY4', JSON.stringify({ ...snapshot, savedAt: Date.now() }))
       }
       const url = new URL(window.location.href)
-      url.search = '?form=gold&Reference=DEV-7BKG-YEY4'
+      url.search = search
       window.history.replaceState({}, '', url.toString())
       const scope = document.createElement('div')
       scope.innerHTML = `
-        <div data-form-success-quote-alt><a href="/sell-gold/calculator">Get another quote</a></div>
-        <div data-form-success-quote-link hidden><a href="#">Download quote</a></div>`
+        <div class="button" data-form-success-show-if="!quote_pdf_url"><a class="button_clickable" href="/sell-gold/calculator">Get another quote</a></div>
+        <div class="u-display-none" data-form-success-show-if="quote_pdf_url">
+          <div class="button" data-form-success-link="quote_pdf_url"><a class="button_clickable" href="#">Download quote</a></div>
+        </div>`
       document.body.appendChild(scope)
       formSuccessPage.hydrateOutputs(scope)
-      return {
-        scope,
-        wrap: scope.querySelector('[data-form-success-quote-link]'),
-        link: scope.querySelector('[data-form-success-quote-link] a'),
-        alt: scope.querySelector('[data-form-success-quote-alt]'),
-      }
+      const [again, download] = scope.querySelectorAll('[data-form-success-show-if]')
+      const shown = (el) => !el.classList.contains('u-display-none') && !el.hidden
+      return { scope, href: download.querySelector('a').getAttribute('href'), again: shown(again), download: shown(download) }
     }
 
     const instant = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', quote_pdf_url: 'https://q.test/quote/DEV-7BKG-YEY4' })
-    expect(instant.link.getAttribute('href')).toBe('https://q.test/quote/DEV-7BKG-YEY4')
-    expect(instant.wrap.hidden).toBe(false)
-    expect(instant.alt.hidden).toBe(true)
+    expect(instant).toMatchObject({ href: 'https://q.test/quote/DEV-7BKG-YEY4', download: true, again: false })
     instant.scope.remove()
 
     const describe = page({ reference: 'DEV-7BKG-YEY4', form: 'gold' })
-    expect(describe.wrap.hidden).toBe(true)
-    expect(describe.alt.hidden).toBe(false)
+    expect(describe).toMatchObject({ href: '#', download: false, again: true })
     describe.scope.remove()
+
+    // Never from the URL.
+    const fromUrl = page(null, '?form=gold&Reference=DEV-7BKG-YEY4&quote_pdf_url=https://evil.test')
+    expect(fromUrl).toMatchObject({ href: '#', download: false, again: true })
+    fromUrl.scope.remove()
   })
 
   it('readStoredSnapshot ignores and removes an expired (old savedAt) snapshot', () => {

@@ -451,7 +451,7 @@ export const formAttribution = {
 
     // Snapshot carries only: (a) what a TY page can render — `reference`, plus
     // the `form`/`enquiry_type`/`asset_type` keys `getSuccessData` surfaces,
-    // and `quote_pdf_url` for the Download quote link on an instant quote;
+    // and `quote_pdf_url`, the gold PDF, on an instant quote only;
     // and (b) `email`/`phone` for the `form_submission` dataLayer push, which
     // fires on TY load (`trackSuccess`) because a native POST can unload the
     // page before an earlier push is sent. `unique_id`/`form_category` derive
