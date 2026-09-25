@@ -74,9 +74,8 @@ export const formSuccessPage = {
       this.showRow(el, negate ? !has : has);
     });
 
-    // Not cleared here: trackSuccess runs right after hydrate in boot() and
-    // needs the snapshot alive to fire the `form_submission` push. It clears
-    // the snapshot only after the push has read it.
+    // trackSuccess runs right after hydrate in boot(), then strips email and
+    // phone from the snapshot; everything shown here stays.
   },
 
   // A row may start with u-display-none, so it doesn't flash before this runs.
@@ -106,11 +105,11 @@ export const formSuccessPage = {
     const reference = params.get('Reference') || params.get('reference') || params.get('ref') || '';
     // Read the raw snapshot (holds email/phone) — reference-keyed first, else _latest.
     const snapshot = this.readStoredSnapshot(reference);
-    if (!snapshot || Object.keys(snapshot).length === 0) return;
+    if (!snapshot || Object.keys(snapshot).length === 0 || snapshot.pushed) return;
 
     const pushed = this.pushSuccessEvent(snapshot);
-    // Ordering guarantee: clear only after the push has read the snapshot.
-    if (pushed) this.clearStoredSnapshot(snapshot.reference || reference);
+    // Ordering guarantee: strip email/phone only after the push has read them.
+    if (pushed) this.markPushed(snapshot.reference || reference);
   },
 
   pushSuccessEvent(snapshot) {
@@ -198,16 +197,22 @@ export const formSuccessPage = {
     return {};
   },
 
-  // Remove the reference-keyed snapshot and the unscoped _latest fallback once
-  // it has been consumed by trackSuccess.
-  clearStoredSnapshot(reference) {
+  // Once pushed, drop email and phone and mark the snapshot, so a refresh or a
+  // second boot still shows the page (reference, links) without pushing again.
+  // The rest expires with the snapshot's 30 minutes.
+  markPushed(reference) {
     if (typeof window === 'undefined' || !window.sessionStorage) return;
     const keys = [
       reference ? `sr_form_success_${reference}` : '',
       'sr_form_success_latest',
     ].filter(Boolean);
     keys.forEach((key) => {
-      try { window.sessionStorage.removeItem(key); } catch {}
+      try {
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) return;
+        const { email, phone, ...rest } = JSON.parse(raw);
+        window.sessionStorage.setItem(key, JSON.stringify({ ...rest, pushed: true }));
+      } catch {}
     });
   },
 

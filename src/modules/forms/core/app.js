@@ -44,8 +44,8 @@ export const formApp = {
     formSuccessPage.hydrateOutputs(scope);
     // form_submission push runs from the TY page, not before handoff: a native
     // lead-form POST can unload the page before an earlier push is sent.
-    // Must run after hydrateOutputs, while the snapshot still exists; it clears
-    // the snapshot once pushed.
+    // Runs after hydrateOutputs; once pushed it strips email and phone from the
+    // snapshot and marks it, so a refresh never pushes twice.
     formSuccessPage.trackSuccess(scope);
     formAttribution.capture();
 

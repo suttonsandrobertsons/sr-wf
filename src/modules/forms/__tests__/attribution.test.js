@@ -1039,6 +1039,16 @@ describe('personal data and cookies', () => {
     expect(offsite).toMatchObject({ again: true, againHref: '/sell-gold/calculator' })
     offsite.scope.remove()
 
+    // A second boot, after the tracking push, still shows it.
+    const again = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', quote_pdf_url: 'https://q.test/quote/DEV-7BKG-YEY4', email: 'dev@dev.com' })
+    window.dataLayer = []
+    formSuccessPage.trackSuccess(document)
+    delete window.dataLayer
+    formSuccessPage.hydrateOutputs(again.scope)
+    expect(again.scope.querySelector('[data-form-success-show-if="quote_pdf_url"]').classList.contains('u-display-none')).toBe(false)
+    expect(again.scope.querySelector('[data-form-success-show-if="quote_pdf_url"]').hidden).toBe(false)
+    again.scope.remove()
+
     // Never from the URL.
     const fromUrl = page(null, '?form=gold&Reference=DEV-7BKG-YEY4&quote_pdf_url=https://evil.test')
     expect(fromUrl).toMatchObject({ href: '#', download: false, again: true })
@@ -1136,16 +1146,31 @@ describe('thank-you page form_submission push (formSuccessPage.trackSuccess)', (
     }))
   })
 
-  it('clears the snapshot only AFTER the push has fired', () => {
+  it('after the push, drops email and phone and keeps what the page shows', () => {
     seedAttribution()
     seedSnapshot()
     setTyUrl()
 
-    expect(window.sessionStorage.getItem('sr_form_success_SR-900')).not.toBeNull()
     formSuccessPage.trackSuccess(document)
 
     expect(window.dataLayer.find((e) => e.event === 'form_submission')).toBeTruthy()
-    expect(window.sessionStorage.getItem('sr_form_success_SR-900')).toBeNull()
+    const stored = JSON.parse(window.sessionStorage.getItem('sr_form_success_SR-900'))
+    expect(stored).toMatchObject({ reference: 'SR-900', form: 'get-a-quote', pushed: true })
+    expect(stored.email).toBeUndefined()
+    expect(stored.phone).toBeUndefined()
+  })
+
+  it('a refresh does not push again', () => {
+    seedAttribution()
+    seedSnapshot()
+    setTyUrl()
+
+    formSuccessPage.trackSuccess(document)
+    // A new page load: the in-memory dedup is gone, only the snapshot remains.
+    formSuccessPage.pushedReferences.clear()
+    formSuccessPage.trackSuccess(document)
+
+    expect(window.dataLayer.filter((e) => e.event === 'form_submission')).toHaveLength(1)
   })
 
   it('does not push when there is no snapshot', () => {

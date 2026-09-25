@@ -466,7 +466,7 @@ export const formAttribution = {
       quote_pdf_url: valueFor(['gold_quote_mode']) === 'instant' ? valueFor(['quote_pdf_url']) : '',
       form_page: window.location.pathname,
       // Retained for the TY-page form_submission push (GTM enhanced
-      // conversions). Not rendered by hydrateOutputs; cleared once the push fires.
+      // conversions). Not rendered by hydrateOutputs; removed once the push fires.
       email: valueFor(['email']),
       phone: this.getPhoneValue(form),
     };
