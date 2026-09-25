@@ -325,7 +325,6 @@ export const formEvents = {
       formSubmitValues.apply(form.root);
       formAttribution.capture();
       const attributionMeta = formAttribution.setFields(form);
-      formAttribution.storeSuccessSnapshot(form, attributionMeta);
 
       const isRedirectSubmit = formRedirect.isRedirect(form);
       if (!isRedirectSubmit) {
@@ -336,14 +335,17 @@ export const formEvents = {
         formAttribution.pushDataLayer(form);
       }
 
-      // For optional dev tooling (active only when dev.js is imported). Fired
-      // after the final refresh so the dev table mirrors the Webflow/Zapier payload.
+      // For quote-sheet.js, which sets quote_pdf_url, and the optional dev
+      // tooling. Fired after the final refresh so the dev table mirrors the
+      // Webflow/Zapier payload.
       try {
         form.root.dispatchEvent(new CustomEvent('suttons:form-submit', {
           detail: { form, originalEvent: event },
           bubbles: true
         }));
       } catch {}
+      // After the event, so the snapshot carries quote_pdf_url.
+      formAttribution.storeSuccessSnapshot(form, attributionMeta);
 
       if (isRedirectSubmit) {
         const redirectValues = formRedirect.getRedirectValues(form);

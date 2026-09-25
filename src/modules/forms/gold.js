@@ -813,7 +813,7 @@ function getItemPrompt(itemElement) {
   const bullionName = normalizeSlug(item.bullionName);
   const metalType = item.metalType;
 
-  if (!itemType) return "Choose gold type to continue";
+  if (!itemType) return "Select type";
   if (itemType === "jewellery") {
     if (!metalType) return "Select carat";
     const weight = parseNumber(item.weightGrams);
@@ -825,7 +825,7 @@ function getItemPrompt(itemElement) {
     if (bullionName === "other" || bullionName === "unsure") return MANUAL_QUOTE_PROMPT;
     return "";
   }
-  return "Choose gold type to continue";
+  return "Select type";
 }
 
 function updateItemPrompt(itemElement) {

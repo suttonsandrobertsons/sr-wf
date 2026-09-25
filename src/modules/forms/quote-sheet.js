@@ -1,4 +1,5 @@
-// Price estimate PDF — the gold calculator's "Download price estimate" link.
+// Price estimate PDF — the gold calculator's "Download price estimate" link,
+// and the thank-you page's "Download quote".
 //
 // The PDF is made by the suttons-quote Worker. This file
 // only gathers what the page shows into one string, `d`, and hands it over:
@@ -17,9 +18,9 @@
 // panel is showing, so its show-if rules (Loan: loan only, Sell: both, not yet
 // chosen: price of your gold today) decide the sheet too. Nothing is priced here.
 //
-// Link visibility is Designer-only: show-if "gold_purchase_total > 0" on the
-// link's wrapper, so it appears once an item is priced. The Price estimate panel is
-// already hidden on the Describe items route, so the link is too.
+// Link visibility is Designer-only. The link's wrapper is hidden for now
+// (24 Sep 2026); the thank-you page offers the PDF instead (core/success-page.js).
+// Its show-if "gold_purchase_total > 0" stays, for when it is shown again.
 
 import { formConfig } from "./config.js";
 import { formDom } from "./core/dom.js";

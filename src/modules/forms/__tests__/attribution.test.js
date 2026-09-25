@@ -984,6 +984,60 @@ describe('personal data and cookies', () => {
     scope.remove()
   })
 
+  it('snapshot keeps quote_pdf_url on an instant quote only', () => {
+    const goldRoot = (mode) => {
+      const root = document.createElement('form')
+      root.innerHTML = `
+        <input type="radio" name="gold_quote_mode" value="instant" ${mode === 'instant' ? 'checked' : ''}>
+        <input type="radio" name="gold_quote_mode" value="describe" ${mode === 'describe' ? 'checked' : ''}>
+        <input type="hidden" name="quote_pdf_url" value="https://q.test/quote/DEV-7BKG-YEY4">`
+      document.body.appendChild(root)
+      return root
+    }
+    for (const [mode, expected] of [['instant', 'https://q.test/quote/DEV-7BKG-YEY4'], ['describe', undefined]]) {
+      window.sessionStorage.clear()
+      const root = goldRoot(mode)
+      const compact = formAttribution.storeSuccessSnapshot({ root, key: 'gold' }, { uniqueId: 'DEV-7BKG-YEY4' })
+      expect(compact.quote_pdf_url).toBe(expected)
+      root.remove()
+    }
+  })
+
+  it('shows Download quote in place of Get another quote when the snapshot has a PDF', () => {
+    const page = (snapshot) => {
+      window.sessionStorage.clear()
+      if (snapshot) {
+        window.sessionStorage.setItem('sr_form_success_DEV-7BKG-YEY4', JSON.stringify({ ...snapshot, savedAt: Date.now() }))
+      }
+      const url = new URL(window.location.href)
+      url.search = '?form=gold&Reference=DEV-7BKG-YEY4'
+      window.history.replaceState({}, '', url.toString())
+      const scope = document.createElement('div')
+      scope.innerHTML = `
+        <div data-form-success-quote-alt><a href="/sell-gold/calculator">Get another quote</a></div>
+        <div data-form-success-quote-link hidden><a href="#">Download quote</a></div>`
+      document.body.appendChild(scope)
+      formSuccessPage.hydrateOutputs(scope)
+      return {
+        scope,
+        wrap: scope.querySelector('[data-form-success-quote-link]'),
+        link: scope.querySelector('[data-form-success-quote-link] a'),
+        alt: scope.querySelector('[data-form-success-quote-alt]'),
+      }
+    }
+
+    const instant = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', quote_pdf_url: 'https://q.test/quote/DEV-7BKG-YEY4' })
+    expect(instant.link.getAttribute('href')).toBe('https://q.test/quote/DEV-7BKG-YEY4')
+    expect(instant.wrap.hidden).toBe(false)
+    expect(instant.alt.hidden).toBe(true)
+    instant.scope.remove()
+
+    const describe = page({ reference: 'DEV-7BKG-YEY4', form: 'gold' })
+    expect(describe.wrap.hidden).toBe(true)
+    expect(describe.alt.hidden).toBe(false)
+    describe.scope.remove()
+  })
+
   it('readStoredSnapshot ignores and removes an expired (old savedAt) snapshot', () => {
     window.sessionStorage.clear()
     const expired = Date.now() - (31 * 60 * 1000) // 31 min ago, past the 30-min TTL

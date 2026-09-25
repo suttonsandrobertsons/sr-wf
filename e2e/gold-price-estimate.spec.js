@@ -3,8 +3,8 @@ import { installSubmitCapture, advanceToEnd } from "./helpers/forms.js";
 import { formConfig } from "../src/modules/forms/config.js";
 
 // The price estimate PDF, end to end on the published calculator: the
-// Download price estimate link, the PDF it opens, and what submit hands to
-// Zapier. Needs the link published in the Gold Form component.
+// Download price estimate link (hidden in the Designer since 24 Sep 2026, but
+// still built), the PDF it opens, and what submit hands to Zapier.
 //
 // No side effects. Webflow's endpoint is answered by installSubmitCapture, so
 // no lead is created, and navigator.sendBeacon is recorded rather than sent,
@@ -49,7 +49,7 @@ async function priceOneItem(page, enquiry) {
     set(carat, [...carat.options].find((o) => /18/.test(o.textContent)).value);
     set(item.querySelector('[data-form-field="weight_grams"] input'), "15");
   });
-  await expect(page.locator(LINK)).toBeVisible();
+  await expect.poll(async () => Number(await page.locator('[data-form="gold"] [name="gold_purchase_total"]').inputValue())).toBeGreaterThan(0);
 }
 
 const decode = (href) => JSON.parse(Buffer.from(new URL(href).searchParams.get("d"), "base64url").toString());
@@ -59,10 +59,10 @@ const addressOf = (page) => page.evaluate((sel) => {
   return link.href;
 }, LINK);
 
-test("the link stays hidden until an item has a figure", async ({ page }) => {
+test("the calculator shows no download link, even once an item has a figure", async ({ page }) => {
   await open(page);
-  await expect(page.locator(LINK)).toBeHidden();
   await priceOneItem(page, "Sell My Items");
+  await expect(page.locator(LINK)).toBeHidden();
 });
 
 test("the link opens a PDF of exactly what the panel shows, with no reference", async ({ page, request }) => {

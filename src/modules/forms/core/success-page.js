@@ -11,6 +11,8 @@ export const formSuccessPage = {
 
   outputSelector: '[data-form-success-output]',
   fieldSelector: '[data-form-success-field]',
+  quoteLinkSelector: '[data-form-success-quote-link]',
+  quoteAltSelector: '[data-form-success-quote-alt]',
 
   shouldScrollToTop() {
     if (typeof window === 'undefined') return false;
@@ -44,6 +46,7 @@ export const formSuccessPage = {
   },
 
   hydrateOutputs(scope = document) {
+    this.showQuoteLink(scope);
     const outputs = Array.from(scope.querySelectorAll(this.outputSelector));
     if (!outputs.length) return;
 
@@ -72,6 +75,26 @@ export const formSuccessPage = {
     // Not cleared here: trackSuccess runs right after hydrate in boot() and
     // needs the snapshot alive to fire the `form_submission` push. It clears
     // the snapshot only after the push has read it.
+  },
+
+  // Gold thank-you page: after an instant quote, the Download quote wrapper
+  // (hidden in the Designer) takes the place of the Get another quote wrapper,
+  // and its link opens the same PDF the Zoho lead links to. Otherwise the page
+  // is left as built. Wrappers, as a Button instance takes no attributes.
+  showQuoteLink(scope = document) {
+    const wraps = Array.from(scope.querySelectorAll(this.quoteLinkSelector));
+    if (!wraps.length) return;
+    const params = new URLSearchParams(window.location.search || '');
+    const reference = params.get('Reference') || params.get('reference') || params.get('ref') || '';
+    const url = this.readStoredSnapshot(reference).quote_pdf_url;
+    if (!url) return;
+
+    wraps.forEach((wrap) => {
+      const link = wrap.matches('a') ? wrap : wrap.querySelector('a');
+      if (link) link.href = url;
+      wrap.removeAttribute('hidden');
+    });
+    scope.querySelectorAll(this.quoteAltSelector).forEach((alt) => alt.setAttribute('hidden', ''));
   },
 
   // Fires the authoritative `form_submission` push from the stored snapshot,
