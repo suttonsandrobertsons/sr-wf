@@ -451,7 +451,8 @@ export const formAttribution = {
 
     // Snapshot carries only: (a) what a TY page can render — `reference`, plus
     // the `form`/`enquiry_type`/`asset_type` keys `getSuccessData` surfaces,
-    // and `quote_pdf_url`, the gold PDF, on an instant quote only;
+    // `quote_pdf_url`, the gold PDF, on an instant quote only, and `form_page`,
+    // the path the form was sent from, for a Get another quote link;
     // and (b) `email`/`phone` for the `form_submission` dataLayer push, which
     // fires on TY load (`trackSuccess`) because a native POST can unload the
     // page before an earlier push is sent. `unique_id`/`form_category` derive
@@ -463,6 +464,7 @@ export const formAttribution = {
       enquiry_type: valueFor(['enquiry_type']),
       asset_type: valueFor(['asset_type']),
       quote_pdf_url: valueFor(['gold_quote_mode']) === 'instant' ? valueFor(['quote_pdf_url']) : '',
+      form_page: window.location.pathname,
       // Retained for the TY-page form_submission push (GTM enhanced
       // conversions). Not rendered by hydrateOutputs; cleared once the push fires.
       email: valueFor(['email']),

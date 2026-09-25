@@ -165,6 +165,8 @@ export const formSuccessPage = {
       asset_type: params.get('asset_type') || stored.asset_type || '',
       // Snapshot only: a link from the URL could point anywhere.
       quote_pdf_url: stored.quote_pdf_url || '',
+      // A same-site path only.
+      form_page: /^\/(?!\/)/.test(stored.form_page || '') ? stored.form_page : '',
     };
   },
 

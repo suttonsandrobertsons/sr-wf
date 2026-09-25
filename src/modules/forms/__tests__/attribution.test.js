@@ -999,6 +999,7 @@ describe('personal data and cookies', () => {
       const root = goldRoot(mode)
       const compact = formAttribution.storeSuccessSnapshot({ root, key: 'gold' }, { uniqueId: 'DEV-7BKG-YEY4' })
       expect(compact.quote_pdf_url).toBe(expected)
+      expect(compact.form_page).toBe(window.location.pathname)
       root.remove()
     }
   })
@@ -1014,7 +1015,7 @@ describe('personal data and cookies', () => {
       window.history.replaceState({}, '', url.toString())
       const scope = document.createElement('div')
       scope.innerHTML = `
-        <div class="button" data-form-success-show-if="!quote_pdf_url"><a class="button_clickable" href="/sell-gold/calculator">Get another quote</a></div>
+        <div data-form-success-show-if="!quote_pdf_url"><div class="button" data-form-success-link="form_page"><a class="button_clickable" href="/sell-gold/calculator">Get another quote</a></div></div>
         <div class="u-display-none" data-form-success-show-if="quote_pdf_url">
           <div class="button" data-form-success-link="quote_pdf_url"><a class="button_clickable" href="#">Download quote</a></div>
         </div>`
@@ -1022,16 +1023,21 @@ describe('personal data and cookies', () => {
       formSuccessPage.hydrateOutputs(scope)
       const [again, download] = scope.querySelectorAll('[data-form-success-show-if]')
       const shown = (el) => !el.classList.contains('u-display-none') && !el.hidden
-      return { scope, href: download.querySelector('a').getAttribute('href'), again: shown(again), download: shown(download) }
+      return { scope, href: download.querySelector('a').getAttribute('href'), againHref: again.querySelector('a').getAttribute('href'), again: shown(again), download: shown(download) }
     }
 
     const instant = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', quote_pdf_url: 'https://q.test/quote/DEV-7BKG-YEY4' })
     expect(instant).toMatchObject({ href: 'https://q.test/quote/DEV-7BKG-YEY4', download: true, again: false })
     instant.scope.remove()
 
-    const describe = page({ reference: 'DEV-7BKG-YEY4', form: 'gold' })
-    expect(describe).toMatchObject({ href: '#', download: false, again: true })
+    const describe = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', form_page: '/gold-loans/calculator' })
+    expect(describe).toMatchObject({ href: '#', download: false, again: true, againHref: '/gold-loans/calculator' })
     describe.scope.remove()
+
+    // Get another quote keeps its Designer link for anything but a same-site path.
+    const offsite = page({ reference: 'DEV-7BKG-YEY4', form: 'gold', form_page: '//evil.test/x' })
+    expect(offsite).toMatchObject({ again: true, againHref: '/sell-gold/calculator' })
+    offsite.scope.remove()
 
     // Never from the URL.
     const fromUrl = page(null, '?form=gold&Reference=DEV-7BKG-YEY4&quote_pdf_url=https://evil.test')
