@@ -492,8 +492,27 @@ function init(form) {
     search(v);
   });
 
-  input.addEventListener("blur", () => {
+  // Typed but never picked: the address fields are still hidden, so nothing
+  // makes them required and only the search text would reach Zoho. Leaving
+  // the box (or pressing Enter) switches to manual entry with what was typed.
+  const isUnpicked = () => {
+    const mode = q('[name="address_mode"]', form)?.value;
+    return mode !== "found" && mode !== "manual" && Boolean(input.value.trim());
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" || suggestions.querySelector("[data-form-select-option]")) return;
+    if (!isUnpicked()) return;
+    event.preventDefault();
+    enterManual();
+  });
+
+  input.addEventListener("blur", (event) => {
     if (blurTimer) clearTimeout(blurTimer);
+    if (!suggestions.contains(event.relatedTarget) && isUnpicked()) {
+      enterManual();
+      return;
+    }
     blurTimer = setTimeout(() => {
       if (!suggestions.contains(document.activeElement)) clearSuggestions(suggestions);
     }, 150);
@@ -505,28 +524,30 @@ function init(form) {
     if (suggestions.querySelector("[data-form-select-option]")) setSuggestionsOpen(suggestions, true);
   });
 
-  if (manualTrigger) {
-    manualTrigger.addEventListener("click", (e) => {
-      e.preventDefault();
-      clearSuggestions(suggestions);
-      if (inputWrapper) inputWrapper.hidden = true;
-      input.hidden = true;
-      // People often search by postcode; prefilling Line 1 with it would let
-      // a bare postcode satisfy required-Line-1 and land in the CRM's street
-      // field. A postcode goes to the postcode field (normalised); anything
-      // else prefills Line 1. Empty search prefills nothing.
-      const typed = input.value.trim();
-      const hasPostcodeField = !!q('[name="postcode"]', form);
-      if (typed && hasPostcodeField && fieldValidators.postcode(typed)) {
-        fillField(form, "postcode", normalisePostcode(typed));
-      } else if (typed) {
-        fillField(form, "address_line_1", typed);
-      }
-      updateCombinedLine1(form);
-      setDefaultCountry(form);
-      setAddressMode(form, "manual");
-    });
+  function enterManual() {
+    clearSuggestions(suggestions);
+    if (inputWrapper) inputWrapper.hidden = true;
+    input.hidden = true;
+    // People often search by postcode; prefilling Line 1 with it would let
+    // a bare postcode satisfy required-Line-1 and land in the CRM's street
+    // field. A postcode goes to the postcode field (normalised); anything
+    // else prefills Line 1. Empty search prefills nothing.
+    const typed = input.value.trim();
+    const hasPostcodeField = !!q('[name="postcode"]', form);
+    if (typed && hasPostcodeField && fieldValidators.postcode(typed)) {
+      fillField(form, "postcode", normalisePostcode(typed));
+    } else if (typed) {
+      fillField(form, "address_line_1", typed);
+    }
+    updateCombinedLine1(form);
+    setDefaultCountry(form);
+    setAddressMode(form, "manual");
   }
+
+  manualTrigger?.addEventListener("click", (e) => {
+    e.preventDefault();
+    enterManual();
+  });
 
   if (autoTrigger) {
     autoTrigger.addEventListener("click", (e) => {

@@ -411,6 +411,50 @@ describe("address module (demo mode)", () => {
     expect(formEl.querySelector('[name="country"]').value).toBe("United Kingdom");
   });
 
+  it("switches to manual entry when the customer leaves the search box without picking", async () => {
+    const { initAddressForms } = await import("../address.js");
+    initAddressForms(formEl);
+
+    searchInput.focus();
+    searchInput.value = "1 Mere Syke";
+    searchInput.blur();
+
+    expect(searchInput.hidden).toBe(true);
+    expect(formEl.querySelector('[name="address_line_1"]').value).toBe("1 Mere Syke");
+    expect(formEl.querySelector('[name="address_mode"]').value).toBe("manual");
+  });
+
+  it("switches to manual entry on Enter when no suggestions are showing", async () => {
+    const { initAddressForms } = await import("../address.js");
+    initAddressForms(formEl);
+
+    searchInput.value = "1 Mere Syke";
+    const enter = new KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true });
+    searchInput.dispatchEvent(enter);
+
+    expect(enter.defaultPrevented).toBe(true);
+    expect(formEl.querySelector('[name="address_mode"]').value).toBe("manual");
+  });
+
+  it("stays in search when focus moves into the suggestions or the box is empty", async () => {
+    vi.useFakeTimers();
+    const { initAddressForms } = await import("../address.js");
+    initAddressForms(formEl);
+
+    searchInput.focus();
+    searchInput.blur();
+    expect(searchInput.hidden).toBe(false);
+
+    searchInput.focus();
+    searchInput.value = "12 high";
+    searchInput.dispatchEvent(new Event("input", { bubbles: true }));
+    await vi.advanceTimersByTimeAsync(350);
+    searchInput.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }));
+
+    expect(document.activeElement.hasAttribute("data-form-select-option")).toBe(true);
+    expect(searchInput.hidden).toBe(false);
+  });
+
   it("routes a postcode-only search to the postcode field (not Line 1) on manual switch", async () => {
     const { initAddressForms } = await import("../address.js");
     initAddressForms(formEl);
