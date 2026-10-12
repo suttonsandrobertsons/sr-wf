@@ -7,6 +7,84 @@ function renderPage(markup) {
 describe("initNav", () => {
 	let readyStateDescriptor;
 
+	it.each(["mouseover", "focusin"])("preserves the driver description for child links without copy on %s", async (eventType) => {
+		const { initNav } = await import("../nav.js");
+		renderPage(`
+			<div class="nav"><div data-nav-mega="about">
+				<div class="nav_mega-col" data-nav-panel-level="1">
+					<div class="nav_mega-item-wrap" data-nav-description="Visit our London stores" data-nav-reveal-panel-id="stores">
+						<a class="nav_mega-item" href="/find-us">Find us</a>
+					</div>
+					<div class="nav_mega-item-wrap" data-nav-description="Our company history">
+						<a class="nav_mega-item" href="/about">About</a>
+					</div>
+				</div>
+				<div class="nav_mega-col-stack">
+					<div class="nav_mega-col" data-nav-panel-id="details"></div>
+					<div class="nav_mega-col" data-nav-panel-id="stores">
+						<p data-nav-replace="about-desc"></p>
+						<a class="nav_mega-item" href="/victoria" data-nav-desc="Visit Victoria Street">Victoria</a>
+						<a class="nav_mega-item" href="/edgware">Edgware Road</a>
+					</div>
+				</div>
+				<a data-nav-url href="#">Learn more</a>
+			</div></div>
+		`);
+		initNav();
+		const description = document.querySelector("[data-nav-replace]");
+		const hover = (href) => document.querySelector(`.nav_mega-item[href="${href}"]`)
+			.dispatchEvent(new Event(eventType, { bubbles: true }));
+		hover("/find-us");
+		expect(description.textContent).toBe("Visit our London stores");
+		hover("/edgware");
+		expect(description.textContent).toBe("Visit our London stores");
+		expect(document.querySelector('[data-nav-panel-id="stores"]').classList.contains("is-active")).toBe(true);
+		expect(document.querySelector("[data-nav-url]").getAttribute("href")).toBe("/edgware");
+		hover("/victoria");
+		expect(description.textContent).toBe("Visit Victoria Street");
+		hover("/edgware");
+		expect(description.textContent).toBe("Visit our London stores");
+		hover("/about");
+		expect(description.textContent).toBe("Our company history");
+	});
+
+	it.each(["mouseover", "focusin"])("switches authored wrapper panels and content on %s", async (eventType) => {
+		const { initNav } = await import("../nav.js");
+		renderPage(`
+			<div class="nav">
+				<div data-nav-mega="loan">
+					<div class="nav_mega-col" data-nav-panel-level="1">
+						<div class="nav_mega-item-wrap" data-nav-target="jewellery">
+							<a class="nav_mega-item" href="/jewellery">Jewellery</a>
+						</div>
+						<div class="nav_mega-item-wrap" data-nav-target="watch" data-nav-description="Watch loans" data-nav-reveal-panel-id="details">
+							<img data-nav-img src="/watch.jpg" alt="Rolex watch">
+							<a class="nav_mega-item" href="/watches">Watches</a>
+						</div>
+					</div>
+					<div class="nav_mega-col-stack">
+						<div class="nav_mega-col" data-nav-panel-id="jewellery"></div>
+						<div class="nav_mega-col" data-nav-panel-id="watch"></div>
+						<div class="nav_mega-col" data-nav-panel-id="details"></div>
+					</div>
+					<div data-nav-media><img></div>
+					<p data-nav-replace="loan-desc"></p>
+					<a data-nav-url href="#">Learn more</a>
+				</div>
+			</div>
+		`);
+		initNav();
+		const items = document.querySelectorAll(".nav_mega-item");
+		items[1].dispatchEvent(new Event(eventType, { bubbles: true }));
+		expect([...document.querySelectorAll(".nav_mega-col-stack .is-active")].map(el => el.dataset.navPanelId)).toEqual(["watch", "details"]);
+		expect(document.querySelector("[data-nav-media] img").getAttribute("src")).toBe("/watch.jpg");
+		expect(document.querySelector("[data-nav-media] img").alt).toBe("Rolex watch");
+		expect(document.querySelector("[data-nav-replace]").textContent).toBe("Watch loans");
+		expect(document.querySelector("[data-nav-url]").getAttribute("href")).toBe("/watches");
+		items[0].dispatchEvent(new Event(eventType, { bubbles: true }));
+		expect([...document.querySelectorAll(".nav_mega-col-stack .is-active")].map(el => el.dataset.navPanelId)).toEqual(["jewellery"]);
+	});
+
 	beforeEach(() => {
 		vi.resetModules();
 		renderPage("");

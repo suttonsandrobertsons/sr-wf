@@ -12,6 +12,7 @@ const SELECTORS = {
 	megaColStack: ".nav_mega-col-stack",
 	megaList: '.nav_mega-list[data-nav-list="primary"]',
 	megaItem: ".nav_mega-item",
+	megaItemWrapper: ".nav_mega-item-wrap, [data-nav-additional-panel]",
 	revealTrigger: "[data-nav-reveal-panel-id]",
 	panelAction: "[data-nav-url]",
 	megaFallback: "[data-nav-panel-fallback]",
@@ -150,31 +151,36 @@ function setActive(el) {
 }
 
 function getImageFromItem(item) {
-	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const wrapper = item?.closest?.(SELECTORS.megaItemWrapper);
 	const image = wrapper?.querySelector("[data-nav-img]");
 
 	return image?.getAttribute("src") || item?.dataset?.navImg || "";
 }
 
 function getImageAltFromItem(item) {
-	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const wrapper = item?.closest?.(SELECTORS.megaItemWrapper);
 	const image = wrapper?.querySelector("[data-nav-img]");
 
 	return image?.getAttribute("alt") || item?.textContent?.trim() || "";
 }
 
 function getDescriptionFromItem(item) {
-	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const wrapper = item?.closest?.(SELECTORS.megaItemWrapper);
 	return wrapper?.dataset?.navDescription || item?.dataset?.navDesc || "";
 }
 
+function getRevealPanelIdFromItem(item) {
+	const wrapper = item?.closest?.(SELECTORS.megaItemWrapper);
+	return wrapper?.dataset?.navRevealPanelId || item?.dataset?.navRevealPanelId || "";
+}
+
 function getTargetFromItem(item) {
-	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const wrapper = item?.closest?.(SELECTORS.megaItemWrapper);
 	return wrapper?.dataset?.navTarget || item?.dataset?.navTarget || "";
 }
 
 function getItemHref(item) {
-	return item?.getAttribute("href") || "";
+	return item?.getAttribute("href") || item?.querySelector?.("a[href]")?.getAttribute("href") || "";
 }
 
 function getBrands() {
@@ -1009,6 +1015,7 @@ function initStackPanel(panel, stack) {
 
 	let currentAssetImage = "";
 	let currentAssetImageAlt = "";
+	let currentDriverDescription = "";
 	let currentDriverTargetId = defaultChildId;
 	let currentRevealPanelId = "";
 	let currentActionHref = "";
@@ -1048,19 +1055,20 @@ function initStackPanel(panel, stack) {
 		setActive(item);
 
 		currentDriverTargetId = normalise(getTargetFromItem(item)) || defaultChildId;
-		currentRevealPanelId = normalise(item.dataset.navRevealPanelId);
+		currentRevealPanelId = normalise(getRevealPanelIdFromItem(item));
 		currentActionHref = getItemHref(item) || currentActionHref;
 		renderChildVisibility(currentDriverTargetId, currentRevealPanelId);
 
 		currentAssetImage = getImageFromItem(item);
 		currentAssetImageAlt = getImageAltFromItem(item);
+		currentDriverDescription = getDescriptionFromItem(item);
 		setMedia(currentAssetImage, currentAssetImageAlt);
 		setPanelActionHref(panel, currentActionHref);
-		setPanelDesc(panel, getDescriptionFromItem(item));
+		setPanelDesc(panel, currentDriverDescription);
 	}
 
 	function activateRevealTrigger(trigger) {
-		const revealPanelId = normalise(trigger.dataset.navRevealPanelId);
+		const revealPanelId = normalise(getRevealPanelIdFromItem(trigger));
 		if (!revealPanelId) return;
 
 		currentRevealPanelId = revealPanelId;
@@ -1078,7 +1086,7 @@ function initStackPanel(panel, stack) {
 		} else {
 			setMedia(currentAssetImage, currentAssetImageAlt);
 		}
-		setPanelDesc(panel, getDescriptionFromItem(item));
+		setPanelDesc(panel, getDescriptionFromItem(item) || currentDriverDescription);
 	}
 
 	function handlePanelItemHover(event) {
