@@ -1,5 +1,7 @@
 import { DESKTOP_MEDIA_QUERY } from "../utils/breakpoints.js";
 
+console.log("[S&R nav] updated nav.js loaded — in-situ nav mode");
+
 const SELECTORS = {
 	component: ".nav",
 	trigger: "[data-nav-trigger]",
@@ -16,10 +18,8 @@ const SELECTORS = {
 	megaMedia: "[data-nav-media]",
 	megaDesc: "[data-nav-replace$='-desc']",
 	megaImg: "[data-nav-replace$='-img']",
-	/* the driver column is the level-1 column with a real data source
-	 * (asset for loan/sell, use-case/general for the detail panels). */
-	megaDriver:
-		'.nav_mega-col[data-nav-panel-level="1"][data-nav-data-src]:not([data-nav-data-src=""])',
+	/* Authored level-1 links drive the child columns through data-nav-target. */
+	megaDriver: '.nav_mega-col[data-nav-panel-level="1"]',
 	generalData: '[data-nav-type="general"]',
 	/* mobile selectors */
 	mobile: ".nav_mobile",
@@ -150,7 +150,27 @@ function setActive(el) {
 }
 
 function getImageFromItem(item) {
-	return item?.dataset?.navImg || "";
+	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const image = wrapper?.querySelector("[data-nav-img]");
+
+	return image?.getAttribute("src") || item?.dataset?.navImg || "";
+}
+
+function getImageAltFromItem(item) {
+	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	const image = wrapper?.querySelector("[data-nav-img]");
+
+	return image?.getAttribute("alt") || item?.textContent?.trim() || "";
+}
+
+function getDescriptionFromItem(item) {
+	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	return wrapper?.dataset?.navDescription || item?.dataset?.navDesc || "";
+}
+
+function getTargetFromItem(item) {
+	const wrapper = item?.closest?.("[data-nav-additional-panel]");
+	return wrapper?.dataset?.navTarget || item?.dataset?.navTarget || "";
 }
 
 function getItemHref(item) {
@@ -651,7 +671,6 @@ function initMobileNav(root) {
 	}
 
 	panels.forEach((panel) => {
-		populateMobilePanel(panel);
 		applyMobileFallbackLinks(panel);
 	});
 
@@ -989,6 +1008,7 @@ function initStackPanel(panel, stack) {
 	const defaultChildId = childCols[0]?.dataset.navPanelId || "";
 
 	let currentAssetImage = "";
+	let currentAssetImageAlt = "";
 	let currentDriverTargetId = defaultChildId;
 	let currentRevealPanelId = "";
 	let currentActionHref = "";
@@ -1027,15 +1047,16 @@ function initStackPanel(panel, stack) {
 		clearActive(driverItems);
 		setActive(item);
 
-		currentDriverTargetId = normalise(item.dataset.navTarget) || defaultChildId;
+		currentDriverTargetId = normalise(getTargetFromItem(item)) || defaultChildId;
 		currentRevealPanelId = normalise(item.dataset.navRevealPanelId);
 		currentActionHref = getItemHref(item) || currentActionHref;
 		renderChildVisibility(currentDriverTargetId, currentRevealPanelId);
 
 		currentAssetImage = getImageFromItem(item);
-		setMedia(currentAssetImage, item.textContent.trim());
+		currentAssetImageAlt = getImageAltFromItem(item);
+		setMedia(currentAssetImage, currentAssetImageAlt);
 		setPanelActionHref(panel, currentActionHref);
-		setPanelDesc(panel, item.dataset.navDesc || "");
+		setPanelDesc(panel, getDescriptionFromItem(item));
 	}
 
 	function activateRevealTrigger(trigger) {
@@ -1051,7 +1072,13 @@ function initStackPanel(panel, stack) {
 	function activateChildItem(item) {
 		currentActionHref = getItemHref(item) || currentActionHref;
 		setPanelActionHref(panel, currentActionHref);
-		setMedia(getImageFromItem(item) || currentAssetImage, item.textContent.trim());
+		const image = getImageFromItem(item);
+		if (image) {
+			setMedia(image, getImageAltFromItem(item));
+		} else {
+			setMedia(currentAssetImage, currentAssetImageAlt);
+		}
+		setPanelDesc(panel, getDescriptionFromItem(item));
 	}
 
 	function handlePanelItemHover(event) {
@@ -1096,9 +1123,9 @@ function initDetailPanel(panel) {
 		setPanelActionHref(panel, currentActionHref);
 
 		const image = getImageFromItem(item);
-		if (image) setImage(media, image, item.textContent.trim());
+		if (image) setImage(media, image, getImageAltFromItem(item));
 
-		setPanelDesc(panel, item.dataset.navDesc || "");
+		setPanelDesc(panel, getDescriptionFromItem(item));
 	}
 
 	function handlePanelItemHover(event) {
@@ -1115,8 +1142,6 @@ function initDetailPanel(panel) {
 }
 
 function initMegaPanel(panel) {
-	panel.querySelectorAll(SELECTORS.megaCol).forEach((col) => populateMegaColumn(col, panel));
-
 	const stack = panel.querySelector(SELECTORS.megaColStack);
 
 	if (stack) {
