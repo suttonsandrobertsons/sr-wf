@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { goldCalculationTestHooks } from '../gold.js'
 import { formConfig } from '../config.js'
 
-const { validateForm, normalizePricingRows, findPricingRow, calculateEstimate, calculateGoldSummary } = goldCalculationTestHooks
+const { validateForm, normalizePricingRows, findPricingRow, calculateEstimate, calculateGoldSummary, renderFormOutputs } = goldCalculationTestHooks
 
 const MESSAGE = 'Minimum loan is £500. Please add more items.'
 const LOAN_MIN = formConfig.gold.loanMin
@@ -26,26 +26,33 @@ function buildInstance(enquiryType, items) {
         <input name="gold_quantity_${i + 1}" value="${quantity}">
       </div>
     `).join('')}
-    <div data-form-gold-output="validation_error"></div>
+    <p data-form-gold-output="loan_total"></p>
   `
   document.body.replaceChildren(form)
   return { form, pricingRows, quote }
 }
 
-function loanTotalFor(items) {
+function summaryFor(items, enquiryType = 'loan', withQuote = quote) {
   const estimates = items.map(([itemType, bullionName, quantity = 1]) => {
     const item = { itemType, bullionName, quantity: String(quantity) }
     return calculateEstimate(item, findPricingRow(pricingRows, item), quote.spotGbpPerGram)
   })
-  return calculateGoldSummary(estimates, 'loan', quote).loanTotal
+  return calculateGoldSummary(estimates, enquiryType, withQuote)
+}
+
+function loanTotalFor(items) {
+  return summaryFor(items).loanTotal
 }
 
 function submit(instance) {
   return validateForm(instance, { showErrors: true, requirePrice: true })
 }
 
-function shownMessage(instance) {
-  return instance.form.querySelector('[data-form-gold-output="validation_error"]').textContent
+function loanBox(summary) {
+  const form = document.createElement('form')
+  form.innerHTML = '<p data-form-gold-output="loan_total"></p>'
+  renderFormOutputs(form, summary)
+  return form.querySelector('[data-form-gold-output="loan_total"]').textContent
 }
 
 afterEach(() => {
@@ -54,12 +61,15 @@ afterEach(() => {
 })
 
 describe('gold £500 minimum loan', () => {
-  it('blocks a loan under £500 and shows the message', () => {
-    const instance = buildInstance('loan', [['bar', '1g_bar']])
-    const validation = submit(instance)
+  it('blocks Continue on a loan under £500', () => {
+    const validation = submit(buildInstance('loan', [['bar', '1g_bar']]))
     expect(validation.ok).toBe(false)
     expect(validation.message).toBe(MESSAGE)
-    expect(shownMessage(instance)).toBe(MESSAGE)
+  })
+
+  it('shows the message in place of the loan amount while the loan is under £500', () => {
+    expect(loanBox(summaryFor([['bar', '1g_bar']]))).toBe(MESSAGE)
+    expect(loanBox(summaryFor([['coin', 'sovereign']]))).toMatch(/^£\d/)
   })
 
   it('allows a loan exactly at the minimum and blocks £1 under it', () => {
@@ -68,26 +78,23 @@ describe('gold £500 minimum loan', () => {
 
     formConfig.gold.loanMin = total
     expect(submit(buildInstance('loan', items)).ok).toBe(true)
+    expect(loanBox(summaryFor(items))).toMatch(/^£\d/)
 
     formConfig.gold.loanMin = total + 1
     expect(submit(buildInstance('loan', items)).ok).toBe(false)
+    expect(loanBox(summaryFor(items))).toBe(MESSAGE)
   })
 
-  it('does not block selling', () => {
-    const instance = buildInstance('Sell My Items', [['bar', '1g_bar']])
-    expect(submit(instance).ok).toBe(true)
-    expect(shownMessage(instance)).toBe('')
+  it('does not block or show the message when selling', () => {
+    expect(submit(buildInstance('Sell My Items', [['bar', '1g_bar']])).ok).toBe(true)
+    expect(summaryFor([['bar', '1g_bar']], 'sell_my_items').belowLoanMin).toBe(false)
   })
 
   it('does not block a loan with an item that has no instant price', () => {
-    const instance = buildInstance('loan', [['bar', '1g_bar'], ['coin', 'other']])
-    expect(submit(instance).ok).toBe(true)
+    expect(submit(buildInstance('loan', [['bar', '1g_bar'], ['coin', 'other']])).ok).toBe(true)
   })
 
-  it('does not show the message while the customer is still filling in the form', () => {
-    const instance = buildInstance('loan', [['bar', '1g_bar']])
-    submit(instance)
-    validateForm(instance)
-    expect(shownMessage(instance)).toBe('')
+  it('does not show the message before the gold price has loaded', () => {
+    expect(summaryFor([['bar', '1g_bar']], 'loan', null).belowLoanMin).toBe(false)
   })
 })
