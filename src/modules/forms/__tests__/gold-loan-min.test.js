@@ -82,7 +82,7 @@ describe('gold £500 minimum loan', () => {
 
     formConfig.gold.loanMin = total + 1
     expect(submit(buildInstance('loan', items)).ok).toBe(false)
-    expect(loanBox(summaryFor(items))).toBe(MESSAGE)
+    expect(loanBox(summaryFor(items))).toBe(`Minimum loan is £${total + 1}. Please add more items.`)
   })
 
   it('does not block or show the message when selling', () => {

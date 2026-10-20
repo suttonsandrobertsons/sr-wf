@@ -35,7 +35,6 @@ const FIELD_NAMES = {
 const GOLD_STATUS_STATES = ["loading", "ready", "invalid", "error"];
 const GOLD_ITEM_STATES = ["pending", "priced", "manual"];
 const MAX_ITEMS = 5;
-const LOAN_MIN_MESSAGE = "Minimum loan is £500. Please add more items.";
 const initializedForms = new WeakSet();
 const instances = new WeakMap();
 
@@ -554,7 +553,7 @@ function validateForm(instance, options = {}) {
     message = instance.priceError ? "Gold price is unavailable. Please try again." : "Gold price is still loading. Please try again in a moment.";
   }
   const belowLoanMin = !message && options.requirePrice && isBelowLoanMin(instance, itemResults);
-  if (belowLoanMin) message = LOAN_MIN_MESSAGE;
+  if (belowLoanMin) message = getLoanMinMessage();
 
   setOwnState(form, "invalid", showErrors && Boolean(message));
   setOutput(form, "validation_error", showErrors ? message : "");
@@ -562,6 +561,10 @@ function validateForm(instance, options = {}) {
   if (message && options.shouldFocus) focusFirstInvalid(items, itemResults);
 
   return { ok: !message, inactive: false, message, itemResults };
+}
+
+function getLoanMinMessage() {
+  return `Minimum loan is ${formatMoney(formConfig.gold.loanMin)}. Please add more items.`;
 }
 
 function isBelowLoanMin(instance, itemResults) {
@@ -918,7 +921,7 @@ function renderFormOutputs(form, summary) {
     }
 
     if (summary.belowLoanMin && key === "loan_total") {
-      writeOutput(output, LOAN_MIN_MESSAGE);
+      writeOutput(output, getLoanMinMessage());
       return;
     }
 
