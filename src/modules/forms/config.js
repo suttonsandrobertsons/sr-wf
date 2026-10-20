@@ -60,6 +60,9 @@ export const TRACKING_FIELDS = [
 
 // Shared by the gold form (gold loans) and the standalone pawn loan calculator,
 // so a rate change can never apply to only one of them.
+// The smallest loan either calculator offers.
+const LOAN_MIN = 500;
+
 const LOAN_RATE_BANDS = [
   { maxExclusive: 5000, interestRate: 6.5, apr: 93.21 },
   { maxInclusive: 15000, interestRate: 6.0, apr: 84.96 },
@@ -192,13 +195,13 @@ export const formConfig = {
     spotDiscountPercent: 3,
     loanTermMonths: 6,
     // Loan enquiries below this whole-£ total can't continue (see gold.js
-    // isBelowLoanMin).
-    loanMin: 500,
+    // calculateGoldSummary belowLoanMin).
+    loanMin: LOAN_MIN,
     rateBands: LOAN_RATE_BANDS,
   },
 
   loan: {
-    min: 500,
+    min: LOAN_MIN,
     max: 15000,
     step: 500,
     durations: [1, 2, 3, 4, 5, 6],

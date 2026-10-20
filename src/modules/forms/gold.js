@@ -553,7 +553,7 @@ function validateForm(instance, options = {}) {
     message = instance.priceError ? "Gold price is unavailable. Please try again." : "Gold price is still loading. Please try again in a moment.";
   }
   const belowLoanMin = !message && options.requirePrice && isBelowLoanMin(instance, itemResults);
-  if (belowLoanMin) message = getLoanMinMessage();
+  if (belowLoanMin) message = "Loan is below the minimum.";
 
   setOwnState(form, "invalid", showErrors && Boolean(message));
   setOutput(form, "validation_error", showErrors ? message : "");
@@ -561,10 +561,6 @@ function validateForm(instance, options = {}) {
   if (message && options.shouldFocus) focusFirstInvalid(items, itemResults);
 
   return { ok: !message, inactive: false, message, itemResults };
-}
-
-function getLoanMinMessage() {
-  return `Minimum loan is ${formatMoney(formConfig.gold.loanMin)}. Please add more items.`;
 }
 
 function isBelowLoanMin(instance, itemResults) {
@@ -895,7 +891,7 @@ function setItemSummaryVisibility(itemElement, hasEstimate) {
 
 const MONEY_KEYS = new Set([
   "spot_price_gbp_gram", "spot_price_gbp_ounce", "spot_total", "purchase_total",
-  "loan_total", "indicative_value", "monthly_interest", "total_interest", "repayment_amount"
+  "loan_total", "loan_min", "indicative_value", "monthly_interest", "total_interest", "repayment_amount"
 ]);
 const NUMBER_KEYS = new Set(["item_count", "manual_count"]);
 const RATE_KEYS = new Set(["interest_rate", "apr"]);
@@ -920,11 +916,6 @@ function renderFormOutputs(form, summary) {
       return;
     }
 
-    if (summary.belowLoanMin && key === "loan_total") {
-      writeOutput(output, getLoanMinMessage());
-      return;
-    }
-
     const value = {
       status: summary.status,
       source: summary.source,
@@ -943,6 +934,7 @@ function renderFormOutputs(form, summary) {
       repayment_amount: summary.repaymentAmount,
       manual_count: summary.manualCount,
       validation_error: summary.validationMessage,
+      loan_min: formConfig.gold.loanMin,
       loan_duration: summary.loanTermMonths ? `${summary.loanTermMonths} months` : "",
     }[key];
 
@@ -988,6 +980,8 @@ function persistSummary(form, summary) {
   w("gold_spot_discount_percent", String(summary.spotDiscountPercent));
   w("gold_offer_spot_price_gbp_gram", String(summary.offerSpotGbpPerGram));
   w("gold_item_count", String(summary.itemCount));
+  // Webflow shows the minimum loan message and hides the loan amount on this.
+  w("gold_loan_below_min", summary.belowLoanMin ? "true" : "");
   w("gold_spot_total", String(summary.spotTotal));
   // Whole £; rounded once in calculateGoldSummary (see the rounding model there).
   w("gold_purchase_total", String(summary.purchaseTotal));

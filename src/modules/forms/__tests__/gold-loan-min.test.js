@@ -2,9 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { goldCalculationTestHooks } from '../gold.js'
 import { formConfig } from '../config.js'
 
-const { validateForm, normalizePricingRows, findPricingRow, calculateEstimate, calculateGoldSummary, renderFormOutputs } = goldCalculationTestHooks
+const { validateForm, normalizePricingRows, findPricingRow, calculateEstimate, calculateGoldSummary, renderFormOutputs, persistSummary } = goldCalculationTestHooks
 
-const MESSAGE = 'Minimum loan is £500. Please add more items.'
 const LOAN_MIN = formConfig.gold.loanMin
 
 const pricingRows = normalizePricingRows([
@@ -48,11 +47,17 @@ function submit(instance) {
   return validateForm(instance, { showErrors: true, requirePrice: true })
 }
 
-function loanBox(summary) {
+// What Webflow reads: the flag its show-if/hide-if rules use, and the amount
+// output inside the message.
+function webflowSees(summary) {
   const form = document.createElement('form')
-  form.innerHTML = '<p data-form-gold-output="loan_total"></p>'
+  form.innerHTML = '<p data-form-gold-output="loan_total"></p><span data-form-gold-output="loan_min"></span>'
   renderFormOutputs(form, summary)
-  return form.querySelector('[data-form-gold-output="loan_total"]').textContent
+  persistSummary(form, summary)
+  return {
+    belowMin: form.querySelector('input[name="gold_loan_below_min"]').value,
+    loanMin: form.querySelector('[data-form-gold-output="loan_min"]').textContent,
+  }
 }
 
 afterEach(() => {
@@ -62,14 +67,12 @@ afterEach(() => {
 
 describe('gold £500 minimum loan', () => {
   it('blocks Continue on a loan under £500', () => {
-    const validation = submit(buildInstance('loan', [['bar', '1g_bar']]))
-    expect(validation.ok).toBe(false)
-    expect(validation.message).toBe(MESSAGE)
+    expect(submit(buildInstance('loan', [['bar', '1g_bar']])).ok).toBe(false)
   })
 
-  it('shows the message in place of the loan amount while the loan is under £500', () => {
-    expect(loanBox(summaryFor([['bar', '1g_bar']]))).toBe(MESSAGE)
-    expect(loanBox(summaryFor([['coin', 'sovereign']]))).toMatch(/^£\d/)
+  it('flags a loan under £500 for Webflow and gives it the minimum amount', () => {
+    expect(webflowSees(summaryFor([['bar', '1g_bar']]))).toEqual({ belowMin: 'true', loanMin: '£500' })
+    expect(webflowSees(summaryFor([['coin', 'sovereign']]))).toEqual({ belowMin: '', loanMin: '£500' })
   })
 
   it('allows a loan exactly at the minimum and blocks £1 under it', () => {
@@ -78,14 +81,14 @@ describe('gold £500 minimum loan', () => {
 
     formConfig.gold.loanMin = total
     expect(submit(buildInstance('loan', items)).ok).toBe(true)
-    expect(loanBox(summaryFor(items))).toMatch(/^£\d/)
+    expect(webflowSees(summaryFor(items)).belowMin).toBe('')
 
     formConfig.gold.loanMin = total + 1
     expect(submit(buildInstance('loan', items)).ok).toBe(false)
-    expect(loanBox(summaryFor(items))).toBe(`Minimum loan is £${total + 1}. Please add more items.`)
+    expect(webflowSees(summaryFor(items))).toEqual({ belowMin: 'true', loanMin: `£${total + 1}` })
   })
 
-  it('does not block or show the message when selling', () => {
+  it('does not block or flag selling', () => {
     expect(submit(buildInstance('Sell My Items', [['bar', '1g_bar']])).ok).toBe(true)
     expect(summaryFor([['bar', '1g_bar']], 'sell_my_items').belowLoanMin).toBe(false)
   })
@@ -94,7 +97,11 @@ describe('gold £500 minimum loan', () => {
     expect(submit(buildInstance('loan', [['bar', '1g_bar'], ['coin', 'other']])).ok).toBe(true)
   })
 
-  it('does not show the message before the gold price has loaded', () => {
+  it('does not flag anything before the gold price has loaded', () => {
     expect(summaryFor([['bar', '1g_bar']], 'loan', null).belowLoanMin).toBe(false)
+  })
+
+  it('uses the same minimum as the pawn loan calculator', () => {
+    expect(formConfig.gold.loanMin).toBe(formConfig.loan.min)
   })
 })
