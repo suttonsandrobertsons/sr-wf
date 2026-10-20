@@ -17,10 +17,6 @@ import { initTabs } from "./src/modules/tabs.js";
 import { initLoadMore } from "./src/modules/load-more.js";
 import { initTables } from "./src/modules/tables.js";
 import { initFaq } from "./src/modules/faq.js";
-import {
-	initStructuredData,
-	registerStructuredDataType,
-} from "./src/modules/structured-data.js";
 import { BREAKPOINT_PX, BREAKPOINT_QUERIES } from "./src/utils/breakpoints.js";
 import { initGoldTrend } from "./src/modules/gold-trend.js";
 import { initHistoryTimeline } from "./src/modules/history-timeline.js";
@@ -62,8 +58,6 @@ sr.functions.initTabs = initTabs;
 sr.functions.initLoadMore = initLoadMore;
 sr.functions.initTables = initTables;
 sr.functions.initFaq = initFaq;
-sr.functions.initStructuredData = initStructuredData;
-sr.functions.registerStructuredDataType = registerStructuredDataType;
 sr.functions.initGoldTrend = initGoldTrend;
 sr.functions.initHistoryTimeline = initHistoryTimeline;
 sr.functions.initMaps = initMaps;
@@ -87,7 +81,6 @@ initAccordions();
 initLoadMore();
 initTables();
 initFaq();
-initStructuredData();
 initGoldTrend();
 initQuoteSheet();
 initAllResourcesFilters();

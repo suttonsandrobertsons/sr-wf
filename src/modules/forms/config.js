@@ -191,6 +191,9 @@ export const formConfig = {
     // 0 disables it.
     spotDiscountPercent: 3,
     loanTermMonths: 6,
+    // Loan enquiries below this whole-£ total can't continue (see gold.js
+    // isBelowLoanMin).
+    loanMin: 500,
     rateBands: LOAN_RATE_BANDS,
   },
 

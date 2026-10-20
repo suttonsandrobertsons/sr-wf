@@ -35,6 +35,7 @@ const FIELD_NAMES = {
 const GOLD_STATUS_STATES = ["loading", "ready", "invalid", "error"];
 const GOLD_ITEM_STATES = ["pending", "priced", "manual"];
 const MAX_ITEMS = 5;
+const LOAN_MIN_MESSAGE = "Minimum loan is £500. Please add more items.";
 const initializedForms = new WeakSet();
 const instances = new WeakMap();
 
@@ -552,13 +553,25 @@ function validateForm(instance, options = {}) {
   else if (options.requirePrice && itemResults.some((result) => !isManualRow(result.row)) && !instance.quote) {
     message = instance.priceError ? "Gold price is unavailable. Please try again." : "Gold price is still loading. Please try again in a moment.";
   }
+  const belowLoanMin = !message && options.requirePrice && isBelowLoanMin(instance, itemResults);
+  if (belowLoanMin) message = LOAN_MIN_MESSAGE;
 
   setOwnState(form, "invalid", showErrors && Boolean(message));
-  setOutput(form, "validation_error", showErrors ? message : "");
+  // Only the minimum loan message shows here; item messages show under their item.
+  setOutput(form, "validation_error", showErrors && belowLoanMin ? message : "");
 
   if (message && options.shouldFocus) focusFirstInvalid(items, itemResults);
 
   return { ok: !message, inactive: false, message, itemResults };
+}
+
+// Loan enquiries only, and only when every item has an instant price.
+function isBelowLoanMin(instance, itemResults) {
+  const enquiryType = normalizeSlug(getFieldValue(instance.form, FIELD_NAMES.enquiryType));
+  if (enquiryType !== "loan" || itemResults.some((result) => isManualRow(result.row))) return false;
+
+  const estimates = itemResults.map((result) => calculateEstimate(result.item, result.row, instance.quote.spotGbpPerGram));
+  return calculateGoldSummary(estimates, enquiryType, instance.quote).loanTotal < formConfig.gold.loanMin;
 }
 
 function hasPricedItems(validation) {
@@ -680,12 +693,7 @@ function evaluate(instance, quote, validation) {
     itemsBySlot.push(estimate);
   });
 
-  const summary = calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot);
-
-  return {
-    ...summary,
-    validationMessage: validation.message || "",
-  };
+  return calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot);
 }
 
 function calculateGoldSummary(estimates, enquiryType, quote, itemsBySlot = estimates) {
@@ -921,7 +929,6 @@ function renderFormOutputs(form, summary) {
       total_interest: summary.totalInterest,
       repayment_amount: summary.repaymentAmount,
       manual_count: summary.manualCount,
-      validation_error: summary.validationMessage,
       loan_duration: summary.loanTermMonths ? `${summary.loanTermMonths} months` : "",
     }[key];
 
@@ -1603,6 +1610,7 @@ export function initGoldForms(scope = document) {
 }
 
 export const goldCalculationTestHooks = {
+  validateForm,
   normalizePricingRows,
   findPricingRow,
   calculateEstimate,
