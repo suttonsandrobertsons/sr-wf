@@ -18,10 +18,11 @@
 // panel is showing, so its show-if rules (Loan: loan only, Sell: both, not yet
 // chosen: price of your gold today) decide the sheet too. Nothing is priced here.
 //
-// Link visibility is Designer-only. The link's wrapper has u-display-none for
-// now (24 Sep 2026); the thank-you page offers the PDF instead, through
+// The link's wrapper defaults to u-display-none in the Designer. Opening the
+// calculator with ?internal=true reveals it for staff convenience, not auth.
+// The thank-you page continues to offer the PDF through
 // data-form-success-link="quote_pdf_url" (core/success-page.js).
-// Its show-if "gold_purchase_total > 0" stays, for when it is shown again.
+// Its show-if "gold_purchase_total > 0" still controls estimate eligibility.
 
 import { formConfig } from "./config.js";
 import { formDom } from "./core/dom.js";
@@ -93,6 +94,12 @@ const worker = () => formConfig.quote.workerBase;
 
 export function initQuoteSheet() {
   if (typeof document === "undefined") return;
+
+  const internal = new URLSearchParams(window.location.search).get("internal") === "true";
+  document.querySelectorAll(`[data-form="gold"] ${LINK}`).forEach((link) => {
+    // Only toggle the link's own wrapper; leave conditional/step hiding intact.
+    link.parentElement.classList.toggle("u-display-none", !internal);
+  });
 
   // Set the address the moment the link is reached, so it is always the
   // figures on screen. pointerdown and contextmenu come before a middle-click,
