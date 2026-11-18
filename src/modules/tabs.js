@@ -1,10 +1,12 @@
 import { menuUnderline } from "./tab-underline.js";
+import { revealOverflowItem } from "./overflow-drag.js";
 
 const selectors = {
 	component: '[data-tab-element="component"]',
 	tabs: '[data-tab-element="tabs"]',
 	template: '[data-tab-element="tab-template"]',
 	panel: '[data-tab-element="panel"]',
+	label: '[data-tab-element="label"]',
 	tab: '[data-tab-element="tab"]',
 	tabText: ".tabs_tabs-item-text",
 	carousel: ".panel-carousel",
@@ -14,6 +16,7 @@ const selectors = {
 };
 
 const cleanupKey = "__tabsCleanup";
+const instanceKey = "__tabsInstance";
 const componentStateAttribute = "data-component-state";
 let componentCount = 0;
 
@@ -45,7 +48,19 @@ function getScopedElements(root, selector) {
 	return qsa(root, selector).filter((element) => element.closest(selectors.component) === root);
 }
 
+function getPanelElements(panel, selector) {
+	const component = panel.closest(selectors.component);
+	return qsa(panel, selector).filter((element) =>
+		element.closest(selectors.panel) === panel &&
+		element.closest(selectors.component) === component,
+	);
+}
+
 function getTabLabel(panel, index) {
+	const text = getPanelElements(panel, selectors.label)[0]
+		?.textContent?.trim();
+	if (text) return text;
+
 	const label = panel.getAttribute("data-tab-text");
 
 	if (label?.trim()) {
@@ -120,7 +135,7 @@ function setElementDisplayVisibility(element, isVisible) {
 	element.removeAttribute("hidden");
 }
 
-function hidePanel(panel, withTransition) {
+function hidePanel(panel, withTransition, isCurrent, onError) {
 	if (!panel) return;
 
 	if (typeof gsap !== "undefined") {
@@ -142,8 +157,13 @@ function hidePanel(panel, withTransition) {
 		duration: 0.2,
 		ease: "power1.out",
 		onComplete: () => {
-			setElementDisplayVisibility(panel, false);
-			gsap.set(panel, { clearProps: "opacity,visibility" });
+			if (!isCurrent()) return;
+			try {
+				setElementDisplayVisibility(panel, false);
+				gsap.set(panel, { clearProps: "opacity,visibility" });
+			} catch (error) {
+				onError(error);
+			}
 		},
 	});
 }
@@ -185,10 +205,41 @@ function getTabIndex(tabs, eventTarget) {
 	return tabs.indexOf(tab);
 }
 
-function updateUnderline(tabsRoot, activeTab, withTransition) {
+function updateUnderline(tabsRoot, activeTab, withTransition, isCurrent, onError) {
 	requestAnimationFrame(() => {
-		menuUnderline(tabsRoot, activeTab, undefined, undefined, "", withTransition);
+		if (!isCurrent()) return;
+		try {
+			menuUnderline(tabsRoot, activeTab, undefined, undefined, "", withTransition);
+		} catch (error) {
+			onError(error);
+		}
 	});
+}
+
+function setFallbackState(component) {
+	component.classList.add("is-fallback");
+	component.setAttribute(componentStateAttribute, "fallback");
+	component.setAttribute("aria-busy", "false");
+}
+
+// Restore only properties owned by tabs; keep authored styles and content.
+function captureElement(element, attributes, styles = [], classes = []) {
+	const originalAttributes = attributes.map((name) => [name, element.getAttribute(name)]);
+	const originalStyles = styles.map((name) => [
+		name, element.style.getPropertyValue(name), element.style.getPropertyPriority(name),
+	]);
+	const originalClasses = classes.map((name) => [name, element.classList.contains(name)]);
+	return () => {
+		originalAttributes.forEach(([name, value]) => {
+			if (value === null) element.removeAttribute(name);
+			else element.setAttribute(name, value);
+		});
+		originalStyles.forEach(([name, value, priority]) => {
+			if (value) element.style.setProperty(name, value, priority);
+			else element.style.removeProperty(name);
+		});
+		originalClasses.forEach(([name, present]) => element.classList.toggle(name, present));
+	};
 }
 
 function setCarouselButtonState(button, isInactive) {
@@ -218,26 +269,37 @@ function setSlideVisibility(slide, isVisible) {
 	slide.removeAttribute("hidden");
 }
 
-function createPanelCarousel(panel) {
+function createPanelCarousel(panel, onError) {
 	if (!panel) return null;
 
-	const carousel = panel.querySelector(selectors.carousel);
+	const carousel = getPanelElements(panel, selectors.carousel)[0];
 
 	if (!carousel) return null;
 
-	const list = carousel.querySelector(selectors.carouselList);
+	const inCarousel = (selector) => getPanelElements(panel, selector)
+		.filter((element) => element.closest(selectors.carousel) === carousel);
+	const list = inCarousel(selectors.carouselList)[0];
 
 	if (!list) return null;
 
-	const slides = qsa(list, selectors.carouselSlide);
+	const slides = inCarousel(selectors.carouselSlide)
+		.filter((element) => element.closest(selectors.carouselList) === list);
 
 	if (!slides.length) return null;
 
-	const buttons = qsa(carousel, selectors.carouselButton);
+	const buttons = inCarousel(selectors.carouselButton);
 	const prevButton = buttons.find((button) => button.classList.contains("is-prev")) || null;
 	const nextButton = buttons.find((button) => !button.classList.contains("is-prev")) || null;
 
 	let activeSlideIndex = 0;
+	let isCurrent = true;
+
+	function guard(callback) {
+		return () => {
+			if (!isCurrent) return;
+			try { callback(); } catch (error) { onError(error); }
+		};
+	}
 
 	slides.forEach((slide, index) => {
 		setSlideVisibility(slide, index === 0);
@@ -246,60 +308,65 @@ function createPanelCarousel(panel) {
 	setCarouselControlsState(prevButton, nextButton, activeSlideIndex, slides.length);
 
 	function setActiveSlide(nextIndex, options = {}) {
-		const { withTransition = true } = options;
-		const boundedIndex = Math.max(0, Math.min(nextIndex, slides.length - 1));
+		if (!isCurrent) return;
+		try {
+			const { withTransition = true } = options;
+			const boundedIndex = Math.max(0, Math.min(nextIndex, slides.length - 1));
 
-		if (boundedIndex === activeSlideIndex) {
+			if (boundedIndex === activeSlideIndex) {
+				setCarouselControlsState(prevButton, nextButton, activeSlideIndex, slides.length);
+				return;
+			}
+
+			const previousSlide = slides[activeSlideIndex];
+			const nextSlide = slides[boundedIndex];
+
+			activeSlideIndex = boundedIndex;
 			setCarouselControlsState(prevButton, nextButton, activeSlideIndex, slides.length);
-			return;
-		}
 
-		const previousSlide = slides[activeSlideIndex];
-		const nextSlide = slides[boundedIndex];
+			if (typeof gsap !== "undefined") {
+				gsap.killTweensOf(previousSlide);
+				gsap.killTweensOf(nextSlide);
+			}
 
-		activeSlideIndex = boundedIndex;
-		setCarouselControlsState(prevButton, nextButton, activeSlideIndex, slides.length);
-
-		if (typeof gsap !== "undefined") {
-			gsap.killTweensOf(previousSlide);
-			gsap.killTweensOf(nextSlide);
-		}
-
-		if (!withTransition || typeof gsap === "undefined") {
-			setSlideVisibility(previousSlide, false);
-			setSlideVisibility(nextSlide, true);
-			return;
-		}
-
-		setElementDisplayVisibility(nextSlide, true);
-		nextSlide.classList.add("is-active");
-
-		gsap.set(nextSlide, { autoAlpha: 0 });
-
-		gsap.to(previousSlide, {
-			autoAlpha: 0,
-			duration: 0.22,
-			ease: "power1.out",
-			onComplete: () => {
+			if (!withTransition || typeof gsap === "undefined") {
 				setSlideVisibility(previousSlide, false);
-			},
-		});
+				setSlideVisibility(nextSlide, true);
+				return;
+			}
 
-		gsap.to(nextSlide, {
-			autoAlpha: 1,
-			duration: 0.28,
-			ease: "power1.out",
-			onComplete: () => {
-				nextSlide.style.opacity = "1";
-				nextSlide.style.visibility = "visible";
-			},
-		});
+			setElementDisplayVisibility(nextSlide, true);
+			nextSlide.classList.add("is-active");
+
+			gsap.set(nextSlide, { autoAlpha: 0 });
+
+			gsap.to(previousSlide, {
+				autoAlpha: 0,
+				duration: 0.22,
+				ease: "power1.out",
+				onComplete: guard(() => {
+					setSlideVisibility(previousSlide, false);
+				}),
+			});
+
+			gsap.to(nextSlide, {
+				autoAlpha: 1,
+				duration: 0.28,
+				ease: "power1.out",
+				onComplete: guard(() => {
+					nextSlide.style.opacity = "1";
+					nextSlide.style.visibility = "visible";
+				}),
+			});
+		} catch (error) {
+			onError(error);
+		}
 	}
 
 	function onCarouselButtonClick(event) {
 		const button = event.target.closest(selectors.carouselButton);
 
-		if (!button || !carousel.contains(button)) return;
+		if (!buttons.includes(button)) return;
 
 		event.preventDefault();
 
@@ -319,6 +386,7 @@ function createPanelCarousel(panel) {
 		slides,
 		setActiveSlide,
 		destroy: () => {
+			isCurrent = false;
 			carousel.removeEventListener("click", onCarouselButtonClick);
 
 			if (typeof gsap !== "undefined") {
@@ -330,214 +398,255 @@ function createPanelCarousel(panel) {
 
 function createTabs(component) {
 	if (!component) return null;
+	if (component[instanceKey]) return component[instanceKey];
 
-	component.setAttribute(componentStateAttribute, "loading");
-	component.setAttribute("aria-busy", "true");
-
-	if (typeof component[cleanupKey] === "function") {
-		component[cleanupKey]();
+	if (window.sr?.tabStartup?.canEnhance() === false) {
+		setFallbackState(component);
+		return null;
 	}
 
 	const panels = getScopedElements(component, selectors.panel);
-
-	if (!panels.length) return null;
-
-	const componentId = ++componentCount;
 	const template = getScopedElements(component, selectors.template)[0] || null;
 	const tabsRoot = getScopedElements(component, selectors.tabs)[0] || null;
 
-	if (!template || !tabsRoot || template.parentElement !== tabsRoot) {
+	if (!panels.length || !template || !tabsRoot || template.parentElement !== tabsRoot || template.tagName !== "BUTTON") {
+		setFallbackState(component);
 		return null;
 	}
 
-	// Template must be a native <button> so cloned tabs keep correct keyboard
-	// and focus behaviour — a div-based template would silently break navigation.
-	if (template.tagName !== "BUTTON") {
-		return null;
-	}
-
+	const componentId = ++componentCount;
 	const tabs = [];
 	const usedPanelIds = new Set();
-	const panelCarousels = panels.map(createPanelCarousel).filter(Boolean);
+	const panelCarousels = [];
+	const slides = getScopedElements(component, selectors.carouselSlide);
+	const restore = [
+		captureElement(tabsRoot, ["role", "aria-hidden", "hidden"], ["display", "--tabs--highlight-w", "--tabs--highlight-l"]),
+		captureElement(template, ["hidden", "aria-hidden", "inert", "tabindex"], ["display"]),
+		...panels.map((panel) => captureElement(panel, ["id", "role", "aria-labelledby", "aria-hidden", "hidden"], ["display", "opacity", "visibility"], ["is-active"])),
+		...slides.map((slide) => captureElement(slide, ["aria-hidden", "hidden"], ["display", "opacity", "visibility"], ["is-active"])),
+		...getScopedElements(component, selectors.carouselButton).map((button) => captureElement(button, ["disabled", "aria-disabled"], [], ["is-inactive"])),
+	];
+	const removeListeners = [];
+	let isCurrent = true;
 	let activeIndex = 0;
 
-	tabsRoot.setAttribute("role", "tablist");
-
-	if (template) {
-		template.removeAttribute("hidden");
-		template.setAttribute("aria-hidden", "true");
-		template.style.display = "none";
-	}
-
-	clearExistingTabs(tabsRoot, template);
-
-	panels.forEach((panel, index) => {
-		const tab = buildTabFromTemplate(template);
-		const label = getTabLabel(panel, index);
-		const panelId = ensurePanelId(panel, componentId, index, usedPanelIds);
-		const tabId = `tabs-tab-${componentId}-${index + 1}`;
-		const isActive = index === 0;
-
-		setTabLabel(tab, label);
-		tab.type = "button";
-		tab.id = tabId;
-		tab.setAttribute("role", "tab");
-		tab.setAttribute("aria-controls", panelId);
-		tab.setAttribute("aria-selected", isActive ? "true" : "false");
-		tab.tabIndex = isActive ? 0 : -1;
-		tab.classList.toggle("is-active", isActive);
-
-		panel.setAttribute("role", "tabpanel");
-		panel.setAttribute("aria-labelledby", tabId);
-		panel.classList.toggle("is-active", isActive);
-		setElementDisplayVisibility(panel, isActive);
-
-		tabsRoot.append(tab);
-		tabs.push(tab);
-	});
-
-	template.remove();
-	setElementDisplayVisibility(tabsRoot, tabs.length > 1);
-
-	function setActiveTab(nextIndex, options = {}) {
-		const { withTransition = true, focusTab = false } = options;
-		const nextTab = tabs[nextIndex];
-		const nextPanel = panels[nextIndex];
-
-		if (!nextTab || !nextPanel) return;
-
-		const previousIndex = activeIndex;
-		const previousPanel = panels[previousIndex];
-		const previousTab = tabs[previousIndex];
-
-		activeIndex = nextIndex;
-
-		tabs.forEach((tab, index) => {
-			const isActive = index === nextIndex;
-
-			tab.classList.toggle("is-active", isActive);
-			tab.setAttribute("aria-selected", isActive ? "true" : "false");
-			tab.tabIndex = isActive ? 0 : -1;
+	function cleanup() {
+		if (!isCurrent) return;
+		isCurrent = false;
+		removeListeners.forEach((remove) => remove());
+		panelCarousels.forEach((instance) => {
+			try { instance.destroy(); } catch (error) { console.error("[tabs] Carousel cleanup failed", error); }
 		});
-
-		panels.forEach((panel, index) => {
-			const isActive = index === nextIndex;
-			const isPrevious = index === previousIndex;
-
-			panel.classList.toggle("is-active", isActive);
-
-			if (isActive) {
-				setElementDisplayVisibility(panel, true);
-				return;
-			}
-
-			if (!isPrevious || !withTransition || previousIndex === nextIndex) {
-				setElementDisplayVisibility(panel, false);
-			}
-		});
-
-		if (previousPanel && previousPanel !== nextPanel) {
-			hidePanel(previousPanel, withTransition);
-		}
-
-		showPanel(nextPanel, previousTab !== nextTab ? withTransition : false);
-
-		if (focusTab) {
-			nextTab.focus();
-		}
-
-		updateUnderline(tabsRoot, nextTab, previousTab !== nextTab ? withTransition : false);
-	}
-
-	function onClick(event) {
-		const tabIndex = getTabIndex(tabs, event.target);
-
-		if (tabIndex < 0) return;
-
-		event.preventDefault();
-		setActiveTab(tabIndex);
-	}
-
-	function onKeydown(event) {
-		const currentIndex = getTabIndex(tabs, event.target);
-
-		if (currentIndex < 0) return;
-
-		let nextIndex = currentIndex;
-
-		switch (event.key) {
-			case "ArrowRight":
-			case "ArrowDown":
-				nextIndex = (currentIndex + 1) % tabs.length;
-				break;
-			case "ArrowLeft":
-			case "ArrowUp":
-				nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-				break;
-			case "Home":
-				nextIndex = 0;
-				break;
-			case "End":
-				nextIndex = tabs.length - 1;
-				break;
-			default:
-				return;
-		}
-
-		event.preventDefault();
-		setActiveTab(nextIndex, {
-			focusTab: true,
-		});
-	}
-
-	function onResize() {
-		updateUnderline(tabsRoot, tabs[activeIndex], false);
-	}
-
-	tabsRoot.addEventListener("click", onClick);
-	tabsRoot.addEventListener("keydown", onKeydown);
-	window.addEventListener("resize", onResize);
-
-	component[cleanupKey] = () => {
-		tabsRoot.removeEventListener("click", onClick);
-		tabsRoot.removeEventListener("keydown", onKeydown);
-		window.removeEventListener("resize", onResize);
-		panelCarousels.forEach((instance) => instance.destroy());
-
 		if (typeof gsap !== "undefined") {
-			panels.forEach((panel) => gsap.killTweensOf(panel));
+			[...panels, ...slides].forEach((element) => {
+				try { gsap.killTweensOf(element); } catch (error) { console.error("[tabs] Tween cleanup failed", error); }
+			});
 		}
+		tabs.forEach((tab) => tab.remove());
+		restore.forEach((restoreElement) => restoreElement());
+		component[cleanupKey] = null;
+		component[instanceKey] = null;
+		setFallbackState(component);
+	}
 
+	function fail(error) {
+		cleanup();
+		console.error("[tabs] Using stacked fallback", component, error);
+	}
+
+	try {
+		component[cleanupKey] = cleanup;
+		component.classList.remove("is-fallback");
 		component.setAttribute(componentStateAttribute, "loading");
 		component.setAttribute("aria-busy", "true");
-		component[cleanupKey] = null;
-	};
+		panels.forEach((panel) => {
+			const carousel = createPanelCarousel(panel, fail);
+			if (carousel) panelCarousels.push(carousel);
+		});
 
-	setActiveTab(0, {
-		withTransition: false,
-	});
+		tabsRoot.setAttribute("role", "tablist");
 
-	requestAnimationFrame(() => {
-		if (component[cleanupKey]) {
+		if (template) {
+			template.hidden = true;
+			template.setAttribute("aria-hidden", "true");
+			template.setAttribute("inert", "");
+			template.tabIndex = -1;
+			template.style.display = "none";
+		}
+
+		clearExistingTabs(tabsRoot, template);
+
+		panels.forEach((panel, index) => {
+			const tab = buildTabFromTemplate(template);
+			const label = getTabLabel(panel, index);
+			const panelId = ensurePanelId(panel, componentId, index, usedPanelIds);
+			const tabId = `tabs-tab-${componentId}-${index + 1}`;
+			const isActive = index === 0;
+
+			setTabLabel(tab, label);
+			tab.type = "button";
+			tab.id = tabId;
+			tab.setAttribute("role", "tab");
+			tab.setAttribute("aria-controls", panelId);
+			tab.setAttribute("aria-selected", isActive ? "true" : "false");
+			tab.tabIndex = isActive ? 0 : -1;
+			tab.classList.toggle("is-active", isActive);
+
+			panel.setAttribute("role", "tabpanel");
+			panel.setAttribute("aria-labelledby", tabId);
+			panel.classList.toggle("is-active", isActive);
+			setElementDisplayVisibility(panel, isActive);
+
+			tabsRoot.append(tab);
+			tabs.push(tab);
+		});
+
+		setElementDisplayVisibility(tabsRoot, tabs.length > 1);
+
+		function setActiveTab(nextIndex, options = {}) {
+			if (!isCurrent) return;
+			try {
+				const { withTransition = true, focusTab = false } = options;
+				const nextTab = tabs[nextIndex];
+				const nextPanel = panels[nextIndex];
+
+				if (!nextTab || !nextPanel) return;
+
+				const previousIndex = activeIndex;
+				const previousPanel = panels[previousIndex];
+				const previousTab = tabs[previousIndex];
+
+				activeIndex = nextIndex;
+
+				tabs.forEach((tab, index) => {
+					const isActive = index === nextIndex;
+
+					tab.classList.toggle("is-active", isActive);
+					tab.setAttribute("aria-selected", isActive ? "true" : "false");
+					tab.tabIndex = isActive ? 0 : -1;
+				});
+
+				panels.forEach((panel, index) => {
+					const isActive = index === nextIndex;
+					const isPrevious = index === previousIndex;
+
+					panel.classList.toggle("is-active", isActive);
+
+					if (isActive) {
+						setElementDisplayVisibility(panel, true);
+						return;
+					}
+
+					if (!isPrevious || !withTransition || previousIndex === nextIndex) {
+						setElementDisplayVisibility(panel, false);
+					}
+				});
+
+				if (previousPanel && previousPanel !== nextPanel) {
+					hidePanel(previousPanel, withTransition, () => isCurrent, fail);
+				}
+
+				showPanel(nextPanel, previousTab !== nextTab ? withTransition : false);
+
+				if (focusTab) {
+					nextTab.focus({ preventScroll: true });
+					revealOverflowItem(nextTab);
+				}
+
+				updateUnderline(tabsRoot, nextTab, previousTab !== nextTab ? withTransition : false, () => isCurrent, fail);
+			} catch (error) {
+				fail(error);
+			}
+		}
+
+		function onClick(event) {
+			const tabIndex = getTabIndex(tabs, event.target);
+
+			if (tabIndex < 0) return;
+
+			event.preventDefault();
+			setActiveTab(tabIndex);
+		}
+
+		function onKeydown(event) {
+			const currentIndex = getTabIndex(tabs, event.target);
+
+			if (currentIndex < 0) return;
+
+			let nextIndex = currentIndex;
+
+			switch (event.key) {
+				case "ArrowRight":
+				case "ArrowDown":
+					nextIndex = (currentIndex + 1) % tabs.length;
+					break;
+				case "ArrowLeft":
+				case "ArrowUp":
+					nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+					break;
+				case "Home":
+					nextIndex = 0;
+					break;
+				case "End":
+					nextIndex = tabs.length - 1;
+					break;
+				default:
+					return;
+			}
+
+			event.preventDefault();
+			setActiveTab(nextIndex, {
+				focusTab: true,
+			});
+		}
+
+		function onResize() {
+			updateUnderline(tabsRoot, tabs[activeIndex], false, () => isCurrent, fail);
+		}
+
+		tabsRoot.addEventListener("click", onClick);
+		removeListeners.push(() => tabsRoot.removeEventListener("click", onClick));
+		tabsRoot.addEventListener("keydown", onKeydown);
+		removeListeners.push(() => tabsRoot.removeEventListener("keydown", onKeydown));
+		window.addEventListener("resize", onResize);
+		removeListeners.push(() => window.removeEventListener("resize", onResize));
+
+		setActiveTab(0, {
+			withTransition: false,
+		});
+
+		if (isCurrent) {
 			component.setAttribute(componentStateAttribute, "ready");
 			component.setAttribute("aria-busy", "false");
-		}
-	});
+		} else return null;
 
-	return {
-		component,
-		tabsRoot,
-		panels,
-		tabs,
-		panelCarousels,
-		setActiveTab,
-		destroy: component[cleanupKey],
-	};
+		const instance = {
+			component,
+			tabsRoot,
+			panels,
+			tabs,
+			panelCarousels,
+			setActiveTab,
+			destroy: cleanup,
+		};
+		component[instanceKey] = instance;
+		return instance;
+	} catch (error) {
+		fail(error);
+		return null;
+	}
 }
 
 export function initTabs(scope = document) {
 	const root = isScope(scope) ? scope : document;
-	const instances = getComponents(root).map(createTabs).filter(Boolean);
+	const instances = getComponents(root).map((component) => {
+		try { return createTabs(component); }
+		catch (error) {
+			setFallbackState(component);
+			console.error("[tabs] Using stacked fallback", component, error);
+			return null;
+		}
+	}).filter(Boolean);
 
 	if (instances.length) {
 		// Rebuilt tab lists can change the tab-strip width, so ask the overflow

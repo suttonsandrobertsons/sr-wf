@@ -195,4 +195,12 @@ describe("createPressLayoutCollisionController", () => {
 		restoreGap();
 		controller.destroy();
 	});
+	it("restores an authored collision class when destroyed", () => {
+		const { root, outer } = buildDom();
+		outer.classList.add("is-vertical");
+		const controller = createPressLayoutCollisionController(root, createSplide(root, 250));
+		controller.destroy();
+		expect(outer.classList.contains("is-vertical")).toBe(true);
+	});
+
 });

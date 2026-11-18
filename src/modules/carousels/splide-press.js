@@ -69,7 +69,8 @@ export function createPressLayoutCollisionController(root, splide, options = {})
 	const gapPx =
 		Number.isFinite(options.gapPx) && options.gapPx >= 0 ? options.gapPx : DEFAULT_GAP_PX;
 
-	let isCollisionActive = pressLayout.classList.contains(collisionClass);
+	const originalCollisionActive = pressLayout.classList.contains(collisionClass);
+	let isCollisionActive = originalCollisionActive;
 	let recheckFrame = null;
 	const scheduleUpdate = debounce(update);
 
@@ -124,7 +125,7 @@ export function createPressLayoutCollisionController(root, splide, options = {})
 				window.cancelAnimationFrame(recheckFrame);
 				recheckFrame = null;
 			}
-			setCollisionState(false);
+			setCollisionState(originalCollisionActive);
 		},
 	};
 }
