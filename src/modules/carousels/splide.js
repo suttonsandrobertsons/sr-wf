@@ -1,6 +1,7 @@
 import { qsa, qs } from "../../utils/dom.js";
 import { BREAKPOINT_PX } from "../../utils/breakpoints.js";
 import { createPressLayoutCollisionController } from "./splide-press.js";
+import { ownedElements, snapshotCarousel } from "./splide-fallback.js";
 let instances = [];
 const FORM_CHANGE_LISTENER_KEY = "__splideFormChangeListenerBound";
 const IMAGE_LOAD_REFRESH_TIMEOUT_MS = 5000;
@@ -323,7 +324,7 @@ function getSplideOptions(root, settings) {
 
 function updateSplideState(splide, root, settings, isOverflow) {
 	const isActive = getSplideActiveState(splide, isOverflow);
-	const carouselControls = qs(root, ".carousel-controls");
+	const carouselControls = ownedElements(root, ".carousel-controls")[0];
 	const paginationEl = carouselControls ? qs(carouselControls, settings.dotsSelector) : null;
 
 	if (paginationEl) {
@@ -372,7 +373,7 @@ function partitionMarqueeSlides(root, settings) {
 	const originals = [];
 	const duplicates = [];
 
-	qsa(root, settings.slideSelector).forEach((slide) => {
+	ownedElements(root, settings.slideSelector).forEach((slide) => {
 		// A clone of a duplicate carries the duplicate attribute too, so the
 		// clone check has to come first.
 		if (slide.classList.contains(SPLIDE_CLONE_CLASS)) return;
@@ -478,13 +479,16 @@ function startSplideAutoScrollWhenReady(splide, settings) {
 	}
 }
 
-function createImageLoadRefreshController(slides, refresh) {
-	const images = slides.flatMap((slide) => qsa(slide, "img"));
+function createImageLoadRefreshController(slides, refresh, snapshot) {
+	const owner = slides[0]?.closest(".splide");
+	const images = slides.flatMap((slide) => qsa(slide, "img"))
+		.filter(image => image.closest(".splide") === owner);
 
 	if (images.length === 0) {
 		return { destroy() {} };
 	}
 
+	snapshot.captureImageLoading(images);
 	const pendingImages = new Set(images.filter((image) => !image.complete));
 	const imageListeners = new Map();
 	let settleTimeout = null;
@@ -564,7 +568,7 @@ function createImageLoadRefreshController(slides, refresh) {
 
 function updateCenterSlideClass(splide, root, settings) {
 	const slides = splide.Components?.Elements?.slides || [];
-	const track = qs(root, settings.trackSelector) || root;
+	const track = ownedElements(root, settings.trackSelector)[0] || root;
 	const trackRect = track.getBoundingClientRect();
 	const centerX = trackRect.left + trackRect.width / 2;
 	let closestSlide = null;
@@ -616,10 +620,14 @@ function hasConditionHiddenContent(slide) {
 function orderSlidesByConditionVisibility(root) {
 	if (!root) return;
 
-	const list = qs(root, ".splide__list");
+	const list = ownedElements(root, ".splide__list")[0];
 	if (!list) return;
 
-	const slides = qsa(list, defaults.slideSelector);
+	const slides = Array.from(list.children).filter(slide =>
+		slide.matches(defaults.slideSelector)
+		&& !slide.classList.contains(SPLIDE_CLONE_CLASS)
+		&& !slide.hasAttribute(defaults.marqueeDuplicateAttr),
+	);
 	if (slides.length <= 1) return;
 
 	const visibleSlides = slides.filter((slide) => !hasConditionHiddenContent(slide));
@@ -642,14 +650,13 @@ function resetCarouselToStart(instance) {
 		return;
 	}
 
-	orderSlidesByConditionVisibility(instance.root || splide.root);
-
-	if (typeof splide.refresh === "function") {
-		splide.refresh();
-	}
-
-	if (typeof splide.go === "function") {
-		splide.go(0);
+	try {
+		orderSlidesByConditionVisibility(instance.root || splide.root);
+		if (typeof splide.refresh === "function") splide.refresh();
+		if (typeof splide.go === "function" && instance.root?._splideInstance !== null) splide.go(0);
+	} catch (error) {
+		console.warn("[carousels/splide] Form reset failed; reverting to native scrolling", error);
+		instance.destroy?.();
 	}
 }
 
@@ -680,20 +687,12 @@ function bindFormChangeReset() {
 	});
 }
 
-function createSplideCarousel(root, settings, userSettings = {}) {
-	if (typeof Splide === "undefined") {
-		console.warn("[carousels/splide] Splide not found.", root);
-		return null;
-	}
-
-	const track = qs(root, settings.trackSelector);
-
-	if (!track) {
-		console.warn("[carousels/splide] Missing track:", root);
-		return null;
-	}
-
-	const slides = qsa(root, settings.slideSelector);
+function createSplideCarousel(root, settings, userSettings, lifecycle) {
+	const slides = ownedElements(root, settings.slideSelector).filter(slide =>
+		slide.parentElement === lifecycle.list
+		&& !slide.classList.contains(SPLIDE_CLONE_CLASS)
+		&& !slide.hasAttribute(settings.marqueeDuplicateAttr),
+	);
 	const slideCount = slides.length;
 
 	const desktopLoop = settings.options.loop;
@@ -730,8 +729,12 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		slideCount,
 	});
 
-	const splide = new Splide(root, splideOptions);
-	const pressLayoutCollision = createPressLayoutCollisionController(root, splide);
+	const vendorStates = Splide.STATES || {};
+	let splide = null;
+	let pressLayoutCollision = { destroy() {} };
+	let imageLoadRefresh = { destroy() {} };
+	let handleViewportChange = null;
+	let paginationEl = null;
 
 	let centerSlideFrame = null;
 	let centerSlideLoopFrame = null;
@@ -739,6 +742,21 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 	let isDestroyed = false;
 	let hasActiveLayout = false;
 	let isMounted = false;
+
+	// Register cleanup before the first mutating dependency call, including
+	// constructors and synchronous mounted/ready callbacks.
+	lifecycle.cleanup = destroy;
+	splide = new Splide(root, splideOptions);
+	pressLayoutCollision = createPressLayoutCollisionController(root, splide);
+
+	function safely(callback) {
+		return (...args) => {
+			if (isDestroyed || lifecycle.error) return;
+			try { return callback(...args); }
+			catch (error) { lifecycle.fail(error); }
+		};
+	}
+	function on(event, callback) { splide.on(event, safely(callback)); }
 
 	function requestCenterSlideUpdate() {
 		if (!shouldUpdateCenterSlide(effectiveSettings)) {
@@ -748,10 +766,10 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 
 		if (centerSlideFrame) return;
 
-		centerSlideFrame = requestAnimationFrame(() => {
+		centerSlideFrame = requestAnimationFrame(safely(() => {
 			centerSlideFrame = null;
 			updateCenterSlideClass(splide, root, effectiveSettings);
-		});
+		}));
 	}
 
 	function runCenterSlideLoop() {
@@ -768,14 +786,14 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 			return;
 		}
 
-		centerSlideLoopFrame = requestAnimationFrame(runCenterSlideLoop);
+		centerSlideLoopFrame = requestAnimationFrame(safely(runCenterSlideLoop));
 	}
 
 	function startCenterSlideLoop() {
 		if (!shouldUpdateCenterSlide(effectiveSettings) || isCenterSlideLoopRunning) return;
 
 		isCenterSlideLoopRunning = true;
-		centerSlideLoopFrame = requestAnimationFrame(runCenterSlideLoop);
+		centerSlideLoopFrame = requestAnimationFrame(safely(runCenterSlideLoop));
 	}
 
 	function stopCenterSlideLoop() {
@@ -798,19 +816,19 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		pressLayoutCollision.update();
 	}
 
-	const imageLoadRefresh =
+	imageLoadRefresh =
 		effectiveSettings.options.autoScroll === true
-			? createImageLoadRefreshController(slides, () => {
+			? createImageLoadRefreshController(slides, safely(() => {
 					// If Splide mounted active, AutoScroll is already running and refreshing
 					// its loop here would cause a visible jump and another play request.
 					if (hasActiveLayout) return;
 					refreshCarouselLayout();
-				})
+				}), lifecycle.snapshot)
 			: { destroy() {} };
 
 	// Setup custom pagination if carousel-controls element exists within splide
-	const carouselControls = qs(root, ".carousel-controls");
-	const paginationEl = carouselControls ? qs(carouselControls, settings.dotsSelector) : null;
+	const carouselControls = ownedElements(root, ".carousel-controls")[0];
+	paginationEl = carouselControls ? qs(carouselControls, settings.dotsSelector) : null;
 	const shouldRenderPagination = effectiveSettings.options.pagination === true;
 
 	function syncPaginationButtonState(activeIndex) {
@@ -851,7 +869,7 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		});
 	}
 
-	splide.on("pagination:mounted", ({ list, items }) => {
+	on("pagination:mounted", ({ list, items }) => {
 		list.classList.add(effectiveSettings.dotsListClass);
 
 		logCarousel(root, "Pagination mounted", {
@@ -884,7 +902,7 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 	}
 
 	// Setup Splide event listeners
-	splide.on("mounted", () => {
+	on("mounted", () => {
 		isMounted = true;
 		expandMarqueeIfNeeded();
 		hasActiveLayout ||= getSplideActiveState(splide);
@@ -896,21 +914,21 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 
 	// AutoScroll may be paused by Splide's own initial positioning after the
 	// mounted event. Recheck its real state once the carousel is fully ready.
-	splide.on("ready", () => {
+	on("ready", () => {
 		startSplideAutoScrollWhenReady(splide, effectiveSettings);
 	});
 
-	splide.on("move", (newIndex) => {
+	on("move", (newIndex) => {
 		syncPaginationButtonState(newIndex);
 		updateSplideState(splide, root, effectiveSettings);
 		startCenterSlideLoop();
 	});
 
-	splide.on("moved", () => {
+	on("moved", () => {
 		stopCenterSlideLoop();
 	});
 
-	splide.on("resize", () => {
+	on("resize", () => {
 		// A wider viewport can outgrow the copies added at mount.
 		expandMarqueeIfNeeded();
 		hasActiveLayout ||= getSplideActiveState(splide);
@@ -919,7 +937,7 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		pressLayoutCollision.scheduleUpdate();
 	});
 
-	splide.on("overflow", (isOverflow) => {
+	on("overflow", (isOverflow) => {
 		// Overflow going false is the marquee's failure mode, not a state to
 		// settle into: expand first, so the rest of this runs on the real state.
 		if (isOverflow === false) expandMarqueeIfNeeded();
@@ -935,66 +953,65 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		pressLayoutCollision.scheduleUpdate();
 	});
 
-	splide.on("drag", () => {
+	on("drag", () => {
 		if (getSplideActiveState(splide)) {
 			root.classList.add(effectiveSettings.draggingClass);
 			startCenterSlideLoop();
 		}
 	});
 
-	splide.on("dragged", () => {
+	on("dragged", () => {
 		root.classList.remove(effectiveSettings.draggingClass);
 		stopCenterSlideLoop();
 	});
 
 	splide.mount(autoScrollExtensions || undefined);
+	// Native EventTarget reports handler errors without throwing from dispatch.
+	// Our handlers record them; fail here before registering or announcing ready.
+	if (lifecycle.error) throw lifecycle.error;
 
 	function destroy() {
-		logCarousel(root, "Destroying Splide carousel instance");
+		if (isDestroyed) return;
 		isDestroyed = true;
-		imageLoadRefresh.destroy();
-
-		if (viewportMediaQuery && handleViewportChange) {
-			viewportMediaQuery.removeEventListener("change", handleViewportChange);
-		}
-
-		if (centerSlideFrame) {
-			cancelAnimationFrame(centerSlideFrame);
-			centerSlideFrame = null;
-		}
-
+		lifecycle.snapshot.beforeDestroy();
+		const attempt = (cleanup) => {
+			try { cleanup(); } catch (error) { console.warn("[carousels/splide] Cleanup failed", error); }
+		};
+		attempt(() => imageLoadRefresh.destroy());
+		attempt(() => viewportMediaQuery.removeEventListener("change", handleViewportChange));
+		if (centerSlideFrame) cancelAnimationFrame(centerSlideFrame);
 		isCenterSlideLoopRunning = false;
-
-		if (centerSlideLoopFrame) {
-			cancelAnimationFrame(centerSlideLoopFrame);
-			centerSlideLoopFrame = null;
+		if (centerSlideLoopFrame) cancelAnimationFrame(centerSlideLoopFrame);
+		attempt(() => pressLayoutCollision.destroy());
+		// This module owns breakpoint rebuilding: prevent Splide's old media
+		// controller from remounting the destroyed instance behind our back.
+		if (splide) {
+			// Splide 4 defers destroy() in CREATED until ready. An interrupted
+			// component mount never reaches ready: dispose each constructed
+			// component and the shared event binder in that emergency only.
+			const createdState = vendorStates.CREATED;
+			const wasCreated = createdState !== undefined && splide.state?.is?.(createdState);
+			let destroyFailed = false;
+			try { splide.destroy(true); }
+			catch (error) { destroyFailed = true; console.warn("[carousels/splide] Vendor teardown failed", error); }
+			if (wasCreated || destroyFailed) {
+				Object.values(splide.Components || {}).reverse().forEach(component => {
+					attempt(() => component.destroy?.(true));
+				});
+				attempt(() => splide.event?.emit("destroy"));
+				attempt(() => splide.event?.destroy());
+				if (vendorStates.DESTROYED !== undefined) {
+					attempt(() => splide.state?.set?.(vendorStates.DESTROYED));
+				}
+			}
 		}
-
-		pressLayoutCollision.destroy();
-
-		root.classList.remove(
-			effectiveSettings.activeCarouselClass,
-			effectiveSettings.inactiveCarouselClass,
-			effectiveSettings.draggingClass,
-		);
-		root.removeAttribute("data-splide-active");
-		root.removeAttribute("data-carousel-active");
-
-		clearCenterSlideClass(root, effectiveSettings);
-
-		if (paginationEl) {
-			paginationEl.innerHTML = "";
-			paginationEl.hidden = false;
-			logCarousel(root, "Pagination cleared on destroy", {
-				hidden: false,
-				source: "destroy",
-			});
-		}
-
-		splide.destroy();
+		const restoreFocus = lifecycle.snapshot.restore();
+		root._centerSlide = null;
 		root._splideInstance = null;
 		root._carouselInstance = null;
 		instances = instances.filter((instance) => instance.root !== root);
+		root.setAttribute("data-carousel-state", "fallback");
+		restoreFocus();
 	}
 
 	const instance = {
@@ -1002,15 +1019,13 @@ function createSplideCarousel(root, settings, userSettings = {}) {
 		splide,
 		destroy,
 		reInit() {
-			refreshCarouselLayout();
+			safely(refreshCarouselLayout)();
 		},
 	};
 
 	root._splideInstance = instance;
 	root._carouselInstance = instance;
 	instances.push(instance);
-
-	let handleViewportChange = null;
 
 	if (viewportOptionsDiffer) {
 		let wasMobile = viewportMatches;
@@ -1046,7 +1061,42 @@ export function createCarousel(root, userSettings = {}) {
 		return null;
 	}
 
-	return createSplideCarousel(root, settings, userSettings);
+	root.setAttribute("data-carousel-state", "fallback");
+	const track = ownedElements(root, settings.trackSelector)[0];
+	const list = track && ownedElements(root, ".splide__list").find(el => el.parentElement === track);
+	const hasSourceSlides = list && Array.from(list.children).some(el => el.matches(settings.slideSelector));
+	if (typeof Splide !== "function" || !track || !list || !hasSourceSlides) return null;
+
+	const lifecycle = {
+		list,
+		snapshot: snapshotCarousel(root, list, settings),
+		cleanup: null,
+		mounting: true,
+		fail(error) {
+			// Propagate synchronous callbacks to the outer transaction. A later
+			// interaction/refresh failure tears down just this root.
+			if (this.mounting) { this.error ||= error; return; }
+			console.warn("[carousels/splide] Reverting to native scrolling", root, error);
+			this.cleanup?.();
+		},
+	};
+	root.setAttribute("data-carousel-state", "mounting");
+	try {
+		const instance = createSplideCarousel(root, settings, userSettings, lifecycle);
+		root.setAttribute("data-carousel-state", "ready");
+		return instance;
+	} catch (error) {
+		console.warn("[carousels/splide] Setup failed; reverting to native scrolling", root, error);
+		if (lifecycle.cleanup) lifecycle.cleanup();
+		else {
+			const restoreFocus = lifecycle.snapshot.restore();
+			root.setAttribute("data-carousel-state", "fallback");
+			restoreFocus();
+		}
+		return null;
+	} finally {
+		lifecycle.mounting = false;
+	}
 }
 
 export function initCarousels(userSettings = {}) {

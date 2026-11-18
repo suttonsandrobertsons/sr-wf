@@ -9,6 +9,17 @@ const OVERFLOW_DRAG_ITEMS_SELECTOR = [
 	".trust-bar_items",
 ].join(", ");
 const OVERFLOW_DRAG_CLEANUP_KEY = "__overflowDragCleanup";
+const OVERFLOW_DRAG_REVEAL_KEY = "__overflowDragReveal";
+
+export function revealOverflowItem(item) {
+	const wrapper = item?.closest(OVERFLOW_DRAG_TRACK_SELECTOR);
+	const reveal = wrapper?.[OVERFLOW_DRAG_REVEAL_KEY];
+	if (typeof reveal === "function") {
+		reveal(item);
+	} else {
+		item?.scrollIntoView?.({ block: "nearest", inline: "nearest", behavior: "instant" });
+	}
+}
 
 export function initOverflowDrag() {
 	if (typeof gsap === "undefined" || typeof Draggable === "undefined") {
@@ -88,6 +99,10 @@ export function initOverflowDrag() {
 					items.classList.remove("is-dragging");
 				},
 			})[0];
+
+			if (items.contains(document.activeElement)) {
+				revealItem(document.activeElement);
+			}
 		}
 
 		function onResize() {
@@ -96,6 +111,24 @@ export function initOverflowDrag() {
 			resizeTimer = setTimeout(() => {
 				init();
 			}, 100);
+		}
+
+		function revealItem(item) {
+			if (!items.contains(item) || item.closest(OVERFLOW_DRAG_TRACK_SELECTOR) !== wrapper) return;
+			// Keyboard focus takes over from a drag, including a still-pending throw.
+			draggable?.tween?.kill();
+			gsap.killTweensOf(items);
+			const trackRect = wrapper.getBoundingClientRect();
+			const itemRect = item.getBoundingClientRect();
+			const offset = itemRect.left < trackRect.left
+				? trackRect.left - itemRect.left
+				: Math.min(0, trackRect.right - itemRect.right);
+			if (!offset) return;
+
+			const { minX, maxX } = getMetrics();
+			const currentX = Number(gsap.getProperty(items, "x")) || 0;
+			gsap.set(items, { x: Math.max(minX, Math.min(maxX, currentX + offset)) });
+			draggable?.update(true);
 		}
 
 		function cleanup() {
@@ -108,10 +141,14 @@ export function initOverflowDrag() {
 			}
 
 			wrapper.classList.remove("has-overflow");
+			if (wrapper[OVERFLOW_DRAG_REVEAL_KEY] === revealItem) {
+				delete wrapper[OVERFLOW_DRAG_REVEAL_KEY];
+			}
 		}
 
 		init();
 		window.addEventListener("resize", onResize);
 		wrapper[OVERFLOW_DRAG_CLEANUP_KEY] = cleanup;
+		wrapper[OVERFLOW_DRAG_REVEAL_KEY] = revealItem;
 	});
 }

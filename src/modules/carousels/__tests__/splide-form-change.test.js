@@ -62,4 +62,21 @@ describe("Splide form change integration", () => {
 		expect(outside._splideInstance.splide.refresh).not.toHaveBeenCalled();
 		expect(outside._splideInstance.splide.go).not.toHaveBeenCalled();
 	});
+	it("does not reorder nested slides into the parent's list", () => {
+		document.body.innerHTML = `<div class="splide" id="outer"><ul class="splide__list"><li class="splide__slide" id="outer-hidden" data-form-state="condition-hidden"></li><li class="splide__slide" id="outer-visible"><div class="splide" id="inner"><ul class="splide__list"><li class="splide__slide" id="inner-slide"></li></ul></div></li></ul></div>`;
+		const inner = document.querySelector("#inner"), slide = document.querySelector("#inner-slide");
+		splideCarouselInternals.orderSlidesByConditionVisibility(document.querySelector("#outer"));
+		expect(slide.parentElement).toBe(inner.querySelector(".splide__list"));
+		expect(Array.from(document.querySelector("#outer > .splide__list").children).map(el => el.id)).toEqual(["outer-visible", "outer-hidden"]);
+	});
+	it("contains a failing form reset and still refreshes the next carousel", () => {
+		document.body.innerHTML = '<form><div class="splide" id="bad"></div><div class="splide" id="good"></div></form>';
+		const bad = document.querySelector("#bad"), good = document.querySelector("#good");
+		bad._splideInstance = { destroy: vi.fn(), splide: { refresh() { throw Error("refresh failed"); } } };
+		good._splideInstance = { splide: { refresh: vi.fn(), go: vi.fn() } };
+		expect(() => splideCarouselInternals.resetCarouselsInForm(document.querySelector("form"))).not.toThrow();
+		expect(bad._splideInstance.destroy).toHaveBeenCalledOnce();
+		expect(good._splideInstance.splide.go).toHaveBeenCalledWith(0);
+	});
+
 });

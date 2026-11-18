@@ -83,7 +83,7 @@ function matchesBreakpoints(breakpoints) {
 function setItemVisibility(item, shouldShow) {
 	item.style.display = shouldShow ? "" : "none";
 	item.hidden = !shouldShow;
-	item.inert = !shouldShow;
+	item.toggleAttribute("inert", !shouldShow);
 }
 
 function bindInstance(instance) {
@@ -101,7 +101,14 @@ function unbindInstance(instance) {
 }
 
 function showAllItems(instance) {
-	instance.items.forEach((item) => setItemVisibility(item, true));
+	instance.items.forEach((item) => {
+		const original = instance.originalItems.get(item);
+		if (original.display) item.style.setProperty("display", original.display, original.priority);
+		else item.style.removeProperty("display");
+		item.toggleAttribute("hidden", original.hidden);
+		item.toggleAttribute("inert", original.inert);
+	});
+	instance.root.removeAttribute("data-load-more-ready");
 	instance.trigger.style.display = "none";
 	instance.trigger.setAttribute("aria-hidden", "true");
 }
@@ -125,7 +132,7 @@ export function createLoadMore(root, userSettings = {}) {
 		...userSettings,
 	};
 
-	const trigger = root.querySelector(selectors.trigger);
+	const trigger = qsa(root, selectors.trigger).find((element) => element.closest(selectors.component) === root);
 
 	if (!trigger) return null;
 
@@ -146,8 +153,13 @@ export function createLoadMore(root, userSettings = {}) {
 		list: root.querySelector(selectors.list),
 		trigger,
 		items,
+		originalItems: new Map(items.map((item) => [item, {
+			display: item.style.getPropertyValue("display"), priority: item.style.getPropertyPriority("display"),
+			hidden: item.hasAttribute("hidden"), inert: item.hasAttribute("inert"),
+		}])),
 		settings: null,
 		isActive: null,
+		destroyed: false,
 		isBound: false,
 		visibleCount: initialCount,
 		mediaQueries: [],
@@ -163,68 +175,70 @@ export function createLoadMore(root, userSettings = {}) {
 		breakpoints: activeBreakpoints,
 	};
 
-	instance.onTriggerClick = () => {
-		if (!instance.isActive) return;
-
-		instance.visibleCount = Math.min(
-			instance.visibleCount + instance.settings.loadCount,
-			instance.items.length,
-		);
-
-		updateItems(instance);
+	const fail = (error) => {
+		instance.destroy();
+		console.warn("[load-more] restored delivered items after failure", error);
 	};
 
-	instance.mediaQueries = activeBreakpoints.map((breakpoint) =>
-		window.matchMedia(BREAKPOINT_QUERIES[breakpoint]),
-	);
-
-	instance.evaluateBreakpointState = () => {
-		const shouldBeActive = matchesBreakpoints(activeBreakpoints);
-
-		if (shouldBeActive === instance.isActive) return;
-
-		instance.isActive = shouldBeActive;
-
-		if (shouldBeActive) {
-			instance.visibleCount = instance.settings.initialCount;
-			bindInstance(instance);
+	instance.onTriggerClick = () => {
+		if (!instance.isActive) return;
+		try {
+			instance.visibleCount = Math.min(instance.visibleCount + instance.settings.loadCount, instance.items.length);
 			updateItems(instance);
-			return;
-		}
-
-		unbindInstance(instance);
-		showAllItems(instance);
+		} catch (error) { fail(error); }
 	};
 
 	instance.destroy = () => {
-		instance.mediaQueries.forEach((mediaQuery) => {
-			mediaQuery.removeEventListener("change", instance.evaluateBreakpointState);
-		});
-
+		if (instance.destroyed) return;
+		instance.destroyed = true;
+		instance.mediaQueries.forEach((mq) => mq.removeEventListener("change", instance.evaluateBreakpointState));
 		unbindInstance(instance);
 		showAllItems(instance);
-
-		root._loadMoreInstance = null;
-		instances = instances.filter((loadMore) => loadMore.root !== root);
+		instance.isActive = false;
+		if (root._loadMoreInstance === instance) root._loadMoreInstance = null;
+		instances = instances.filter((loadMore) => loadMore !== instance);
 	};
 
-	instance.mediaQueries.forEach((mediaQuery) => {
-		mediaQuery.addEventListener("change", instance.evaluateBreakpointState);
-	});
+	instance.evaluateBreakpointState = () => {
+		if (instance.destroyed) return;
+		try {
+			const shouldBeActive = matchesBreakpoints(activeBreakpoints);
+			if (shouldBeActive === instance.isActive) return;
+			instance.isActive = shouldBeActive;
+			if (shouldBeActive) {
+				instance.visibleCount = instance.settings.initialCount;
+				bindInstance(instance);
+				updateItems(instance);
+				root.setAttribute("data-load-more-ready", "true");
+				return;
+			}
+			unbindInstance(instance);
+			showAllItems(instance);
+		} catch (error) { fail(error); }
+	};
 
-	instance.evaluateBreakpointState();
+	try {
+		activeBreakpoints.forEach((breakpoint) => {
+			const mq = window.matchMedia(BREAKPOINT_QUERIES[breakpoint]);
+			instance.mediaQueries.push(mq);
+			mq.addEventListener("change", instance.evaluateBreakpointState);
+		});
+		root._loadMoreInstance = instance;
+		instances.push(instance);
+		instance.evaluateBreakpointState();
+	} catch (error) { fail(error); return null; }
 
-	root._loadMoreInstance = instance;
-	instances.push(instance);
-
-	return instance;
+	return instance.destroyed ? null : instance;
 }
 
 export function initLoadMore(scopeOrSettings = document, maybeSettings = {}) {
 	const { scope, settings } = normalizeInitArgs(scopeOrSettings, maybeSettings);
 
 	return getComponents(scope)
-		.map((component) => createLoadMore(component, settings))
+		.map((component) => {
+			try { return createLoadMore(component, settings); }
+			catch (error) { console.warn("[load-more] setup failed", error); return null; }
+		})
 		.filter(Boolean);
 }
 

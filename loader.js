@@ -68,19 +68,25 @@ sr.functions.getContactWidgetInstances = getContactWidgetInstances;
 sr.functions.initA11yAnchors = initA11yAnchors;
 sr.functions.initQuoteSheet = initQuoteSheet;
 
+// Keep the established order while containing failures in these enhancements.
+function initEnhancement(name, initialize) {
+	try { initialize(); }
+	catch (error) { console.warn(`[sr] ${name} initialization failed`, error); }
+}
+
 // Priority: critical
 initNav();
 initSectionNav();
 initForms();
 
 // Priority: high
-initTabs();
+initEnhancement("initTabs", initTabs);
 initOverflowDrag();
-initSplideCarousels();
-initAccordions();
-initLoadMore();
+initEnhancement("initSplideCarousels", initSplideCarousels);
+initEnhancement("initAccordions", initAccordions);
+initEnhancement("initLoadMore", initLoadMore);
 initTables();
-initFaq();
+initEnhancement("initFaq", initFaq);
 initGoldTrend();
 initQuoteSheet();
 initAllResourcesFilters();

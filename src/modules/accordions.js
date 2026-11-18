@@ -88,7 +88,7 @@ function getItemsFromRoot(root) {
 		return [root];
 	}
 
-	return qsa(root, selectors.item);
+	return qsa(root, selectors.item).filter((item) => item.closest(selectors.component) === root);
 }
 
 function getAccordionEase() {
@@ -138,20 +138,42 @@ function matchesBreakpoints(breakpoints) {
 	);
 }
 
-function resetItemNativeState(record) {
-	record.item.classList.remove("is-open");
-	record.trigger.removeAttribute("aria-expanded");
-	record.timeline.pause(0);
-	gsap.set(record.content, { clearProps: "height,overflow" });
+// Snapshot only properties this enhancement owns; never replace an entire style.
+function snapshot(element, styles = [], attributes = []) {
+	const values = styles.map((name) => [name, element.style.getPropertyValue(name), element.style.getPropertyPriority(name)]);
+	const attrs = attributes.map((name) => [name, element.getAttribute(name)]);
+	return () => {
+		values.forEach(([name, value, priority]) => value ? element.style.setProperty(name, value, priority) : element.style.removeProperty(name));
+		attrs.forEach(([name, value]) => value === null ? element.removeAttribute(name) : element.setAttribute(name, value));
+	};
+}
 
-	if (record.icon) {
-		gsap.set(record.icon, { clearProps: "rotation,transform" });
-	}
+function resetItemNativeState(record, kill = false) {
+	// GSAP can write styles while rewinding; restore snapshots afterwards.
+	try { kill ? record.timeline?.kill() : record.timeline?.pause(0); }
+	catch (error) { console.warn("[accordions] timeline cleanup failed", error); }
+	unbindRecord(record);
+	record.item.removeAttribute("data-accordion-ready");
+	record.item.classList.toggle("is-open", record.wasOpen);
+	record.restoreContent();
+	record.restoreTrigger();
+	record.restoreIcon?.();
+}
+
+function failRecord(record, error) {
+	record.failed = true;
+	resetItemNativeState(record, true);
+	console.warn("[accordions] item fell back to readable content", error);
 }
 
 function bindRecord(record) {
 	if (record.isBound) return;
 
+	if (!record.isNativeButton) {
+		record.trigger.setAttribute("role", "button");
+		record.trigger.setAttribute("tabindex", "0");
+		record.trigger.addEventListener("keydown", record.onTriggerKeydown);
+	}
 	record.trigger.addEventListener("click", record.onTriggerClick);
 	record.isBound = true;
 }
@@ -160,14 +182,17 @@ function unbindRecord(record) {
 	if (!record.isBound) return;
 
 	record.trigger.removeEventListener("click", record.onTriggerClick);
+	record.trigger.removeEventListener("keydown", record.onTriggerKeydown);
 	record.isBound = false;
 }
 
 function setItemOpenState(record, isOpen) {
-	if (!record.instance?.isActive) return;
+	if (!record.instance?.isActive || record.instance.destroyed || record.failed) return;
 
 	record.item.classList.toggle("is-open", isOpen);
 	record.trigger.setAttribute("aria-expanded", isOpen ? "true" : "false");
+	record.content.toggleAttribute("inert", !isOpen);
+	record.content.setAttribute("aria-hidden", isOpen ? "false" : "true");
 
 	// The timeline is rendered during setup, so GSAP caches the resolved value of
 	// `height: "auto"`. Content injected later would otherwise animate to that
@@ -276,75 +301,54 @@ export function createAccordion(root, userSettings = {}) {
 		items: records,
 		settings: null,
 		isActive: null,
+		destroyed: false,
 		mediaQueries: [],
 		evaluateBreakpointState: null,
 		destroy: null,
 	};
 
 	items.forEach((item, index) => {
-		const trigger = item.querySelector(selectors.trigger);
-		const content = item.querySelector(selectors.content);
-		const icon = item.querySelector(selectors.icon);
-
+		const owned = (selector) => qsa(item, selector).find((element) => element.closest(selectors.item) === item);
+		const trigger = owned(selectors.trigger);
+		const content = owned(selectors.content);
+		const icon = owned(selectors.icon);
 		if (!trigger || !content) return;
 
-		const isInitiallyOpen = allowFirstOpen && index === 0;
-
-		const timeline = gsap.timeline({
-			paused: true,
-			reversed: !isInitiallyOpen,
-		});
-
-		timeline.fromTo(
-			content,
-			{ height: 0 },
-			{
-				height: "auto",
-				duration: 0.4,
-				ease,
-			},
-		);
-
-		if (icon) {
-			timeline.fromTo(
-				icon,
-				{ rotation: 0 },
-				{
-					rotation: 180,
-					duration: 0.4,
-					ease,
-				},
-				"<",
-			);
-		}
-
 		const record = {
-			instance,
-			item,
-			trigger,
-			content,
-			icon,
-			timeline,
-			onTriggerClick: null,
-			isInitiallyOpen,
-			isBound: false,
+			instance, item, trigger, content, icon, timeline: null,
+			onTriggerClick: null, onTriggerKeydown: null,
+			isNativeButton: trigger.matches('button, input[type="button"], input[type="submit"], input[type="reset"]'),
+			isInitiallyOpen: allowFirstOpen && index === 0,
+			wasOpen: item.classList.contains("is-open"), isBound: false, failed: false,
+			restoreContent: snapshot(content, ["height", "overflow"], ["inert", "aria-hidden"]),
+			restoreTrigger: snapshot(trigger, [], ["aria-expanded", "role", "tabindex"]),
+			restoreIcon: icon ? snapshot(icon,
+				["transform", "transform-origin", "translate", "rotate", "scale"],
+				["transform", "data-svg-origin"]) : null,
 		};
+		records.push(record);
+		try {
+			record.timeline = gsap.timeline({ paused: true, reversed: !record.isInitiallyOpen });
+			record.timeline.fromTo(content, { height: 0 }, { height: "auto", duration: 0.4, ease });
+			if (icon) record.timeline.fromTo(icon, { rotation: 0 }, { rotation: 180, duration: 0.4, ease }, "<");
+		} catch (error) { failRecord(record, error); }
 
 		record.onTriggerClick = () => {
-			const isOpen = item.classList.contains("is-open");
-
-			if (closeOthers) {
-				records.forEach((otherRecord) => {
-					if (otherRecord !== record) {
-						setItemOpenState(otherRecord, false);
+			try {
+				const isOpen = item.classList.contains("is-open");
+				if (closeOthers) records.forEach((other) => {
+					if (other !== record) {
+						try { setItemOpenState(other, false); } catch (error) { failRecord(other, error); }
 					}
 				});
-			}
-
-			setItemOpenState(record, !isOpen);
+				setItemOpenState(record, !isOpen);
+			} catch (error) { failRecord(record, error); }
 		};
-
-		records.push(record);
+		record.onTriggerKeydown = (event) => {
+			if (event.target !== trigger || (event.key !== "Enter" && event.key !== " ")) return;
+			event.preventDefault();
+			if (!event.repeat) trigger.click();
+		};
 	});
 
 	instance.settings = {
@@ -353,68 +357,59 @@ export function createAccordion(root, userSettings = {}) {
 		breakpoints: activeBreakpoints,
 	};
 
-	instance.mediaQueries = activeBreakpoints.map((breakpoint) =>
-		window.matchMedia(BREAKPOINT_QUERIES[breakpoint]),
-	);
+	instance.destroy = () => {
+		if (instance.destroyed) return;
+		instance.destroyed = true;
+		instance.isActive = false;
+		instance.mediaQueries.forEach((mq) => mq.removeEventListener("change", instance.evaluateBreakpointState));
+		records.forEach((record) => resetItemNativeState(record, true));
+		if (root._accordionInstance === instance) root._accordionInstance = null;
+		instances = instances.filter((accordion) => accordion !== instance);
+	};
 
 	instance.evaluateBreakpointState = () => {
-		const shouldBeActive = matchesBreakpoints(activeBreakpoints);
-
-		if (shouldBeActive === instance.isActive) return;
-
-		instance.isActive = shouldBeActive;
-
-		records.forEach((record) => {
-			if (shouldBeActive) {
-				bindRecord(record);
-
-				gsap.set(record.content, {
-					height: record.isInitiallyOpen ? "auto" : 0,
-					overflow: "hidden",
-				});
-
-				if (record.icon) {
-					gsap.set(record.icon, {
-						rotation: record.isInitiallyOpen ? 180 : 0,
-					});
-				}
-
-				record.item.classList.toggle("is-open", record.isInitiallyOpen);
-				record.trigger.setAttribute("aria-expanded", record.isInitiallyOpen ? "true" : "false");
-				record.timeline.progress(record.isInitiallyOpen ? 1 : 0).pause();
-				return;
-			}
-
-			unbindRecord(record);
-			resetItemNativeState(record);
-		});
+		if (instance.destroyed) return;
+		try {
+			const shouldBeActive = matchesBreakpoints(activeBreakpoints);
+			if (shouldBeActive === instance.isActive) return;
+			instance.isActive = shouldBeActive;
+			records.forEach((record) => {
+				if (record.failed) return;
+				try {
+					if (!shouldBeActive) { resetItemNativeState(record); return; }
+					bindRecord(record);
+					gsap.set(record.content, { height: record.isInitiallyOpen ? "auto" : 0, overflow: "hidden" });
+					if (record.icon) gsap.set(record.icon, { rotation: record.isInitiallyOpen ? 180 : 0 });
+					record.item.classList.toggle("is-open", record.isInitiallyOpen);
+					record.trigger.setAttribute("aria-expanded", record.isInitiallyOpen ? "true" : "false");
+					record.content.toggleAttribute("inert", !record.isInitiallyOpen);
+					record.content.setAttribute("aria-hidden", record.isInitiallyOpen ? "false" : "true");
+					record.timeline.progress(record.isInitiallyOpen ? 1 : 0).pause();
+					record.item.setAttribute("data-accordion-ready", "true");
+				} catch (error) { failRecord(record, error); }
+			});
+		} catch (error) {
+			instance.destroy();
+			console.warn("[accordions] breakpoint setup failed", error);
+		}
 	};
 
-	instance.destroy = () => {
-		instance.mediaQueries.forEach((mediaQuery) => {
-			mediaQuery.removeEventListener("change", instance.evaluateBreakpointState);
+	try {
+		activeBreakpoints.forEach((breakpoint) => {
+			const mq = window.matchMedia(BREAKPOINT_QUERIES[breakpoint]);
+			instance.mediaQueries.push(mq);
+			mq.addEventListener("change", instance.evaluateBreakpointState);
 		});
+		root._accordionInstance = instance;
+		instances.push(instance);
+		instance.evaluateBreakpointState();
+	} catch (error) {
+		instance.destroy();
+		console.warn("[accordions] setup failed", error);
+		return null;
+	}
 
-		records.forEach((record) => {
-			unbindRecord(record);
-			record.timeline.kill();
-			resetItemNativeState(record);
-		});
-
-		root._accordionInstance = null;
-		instances = instances.filter((accordion) => accordion.root !== root);
-	};
-
-	instance.mediaQueries.forEach((mediaQuery) => {
-		mediaQuery.addEventListener("change", instance.evaluateBreakpointState);
-	});
-
-	instance.evaluateBreakpointState();
-
-	root._accordionInstance = instance;
-	instances.push(instance);
-
-	return instance;
+	return instance.destroyed ? null : instance;
 }
 
 export function initAccordions(scopeOrSettings = document, maybeSettings = {}) {
@@ -423,7 +418,10 @@ export function initAccordions(scopeOrSettings = document, maybeSettings = {}) {
 	bindFinsweetEvents();
 
 	return getAccordionRoots(scope)
-		.map((component) => createAccordion(component, settings))
+		.map((component) => {
+			try { return createAccordion(component, settings); }
+			catch (error) { console.warn("[accordions] setup failed", error); return null; }
+		})
 		.filter(Boolean);
 }
 
