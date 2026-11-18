@@ -1,8 +1,10 @@
+import { faqRoot, accordionFaqRoot, canStartFaq, canStartComponent, fallbackFaq, registerFaqCleanup, registerPending } from "./faq-startup.js";
 import { BREAKPOINT_QUERIES } from "../utils/breakpoints.js";
 
 let instances = [];
 let hasCreatedAccordionEase = false;
 let hasBoundFinsweetEvents = false;
+let pendingInits = [];
 
 const accordionEaseName = "cssEase";
 const accordionEaseCurve = "M0,0 C0.25,0.1 0.25,1 1,1";
@@ -66,7 +68,7 @@ function getAccordionRoots(scope = document) {
 	}
 
 	const pushStandaloneItem = (item) => {
-		if (!item || item.closest(selectors.component)) return;
+		if (!item || owningAccordionRoot(item) !== item) return;
 		pushUnique(item);
 	};
 
@@ -81,6 +83,11 @@ function getAccordionRoots(scope = document) {
 	return roots;
 }
 
+function owningAccordionRoot(item) {
+	const boundary = item.parentElement?.closest(`${selectors.component}, ${selectors.item}`);
+	return boundary?.matches(selectors.component) && faqRoot(item) === faqRoot(boundary) ? boundary : item;
+}
+
 function getItemsFromRoot(root) {
 	if (!root) return [];
 
@@ -88,7 +95,7 @@ function getItemsFromRoot(root) {
 		return [root];
 	}
 
-	return qsa(root, selectors.item).filter((item) => item.closest(selectors.component) === root);
+	return qsa(root, selectors.item).filter((item) => owningAccordionRoot(item) === root);
 }
 
 function getAccordionEase() {
@@ -162,7 +169,9 @@ function resetItemNativeState(record, kill = false) {
 
 function failRecord(record, error) {
 	record.failed = true;
+	record.item.setAttribute("data-accordion-startup-state", "fallback");
 	resetItemNativeState(record, true);
+	fallbackFaq(accordionFaqRoot(record.item));
 	console.warn("[accordions] item fell back to readable content", error);
 }
 
@@ -277,7 +286,20 @@ function bindFinsweetEvents() {
 export function createAccordion(root, userSettings = {}) {
 	if (!root || root._accordionInstance) return root?._accordionInstance || null;
 
+	const faq = accordionFaqRoot(root);
+	const items = getItemsFromRoot(root);
+	const fallback = () => {
+		items.forEach((item) => item.setAttribute("data-accordion-startup-state", "fallback"));
+		fallbackFaq(faq);
+	};
+	const refuseLate = () => {
+		items.forEach((item) => item.setAttribute("data-accordion-startup-state", "fallback"));
+		if (faq?.getAttribute("data-faq-startup-state") !== "managed") fallbackFaq(faq);
+	};
+	if ((faq && !canStartFaq(faq)) || !canStartComponent()) { refuseLate(); return null; }
+	if (items.length && items.every((item) => item.getAttribute("data-accordion-startup-state") === "fallback")) return null;
 	if (typeof gsap === "undefined") {
+		fallback();
 		console.warn("[accordions] gsap not found.");
 		return null;
 	}
@@ -292,8 +314,9 @@ export function createAccordion(root, userSettings = {}) {
 	const closeOthers = isComponentRoot
 		? getBooleanSetting(root, "data-accordion-close-others", settings.closeOthers)
 		: false;
-	const ease = getAccordionEase();
-	const items = getItemsFromRoot(root);
+	let ease;
+	try { ease = getAccordionEase(); }
+	catch (error) { fallback(); console.warn("[accordions] ease failed", error); return null; }
 	const records = [];
 
 	const instance = {
@@ -312,7 +335,12 @@ export function createAccordion(root, userSettings = {}) {
 		const trigger = owned(selectors.trigger);
 		const content = owned(selectors.content);
 		const icon = owned(selectors.icon);
-		if (!trigger || !content) return;
+		if (item.getAttribute("data-accordion-startup-state") === "fallback") return;
+		if (!trigger || !content) {
+			item.setAttribute("data-accordion-startup-state", "fallback");
+			fallbackFaq(faq);
+			return;
+		}
 
 		const record = {
 			instance, item, trigger, content, icon, timeline: null,
@@ -327,11 +355,6 @@ export function createAccordion(root, userSettings = {}) {
 				["transform", "data-svg-origin"]) : null,
 		};
 		records.push(record);
-		try {
-			record.timeline = gsap.timeline({ paused: true, reversed: !record.isInitiallyOpen });
-			record.timeline.fromTo(content, { height: 0 }, { height: "auto", duration: 0.4, ease });
-			if (icon) record.timeline.fromTo(icon, { rotation: 0 }, { rotation: 180, duration: 0.4, ease }, "<");
-		} catch (error) { failRecord(record, error); }
 
 		record.onTriggerClick = () => {
 			try {
@@ -357,9 +380,13 @@ export function createAccordion(root, userSettings = {}) {
 		breakpoints: activeBreakpoints,
 	};
 
+	let detachFaq = () => {};
+	let unregister = () => {};
 	instance.destroy = () => {
 		if (instance.destroyed) return;
 		instance.destroyed = true;
+		detachFaq();
+		unregister();
 		instance.isActive = false;
 		instance.mediaQueries.forEach((mq) => mq.removeEventListener("change", instance.evaluateBreakpointState));
 		records.forEach((record) => resetItemNativeState(record, true));
@@ -374,7 +401,7 @@ export function createAccordion(root, userSettings = {}) {
 			if (shouldBeActive === instance.isActive) return;
 			instance.isActive = shouldBeActive;
 			records.forEach((record) => {
-				if (record.failed) return;
+				if (record.failed || instance.destroyed) return;
 				try {
 					if (!shouldBeActive) { resetItemNativeState(record); return; }
 					bindRecord(record);
@@ -389,12 +416,28 @@ export function createAccordion(root, userSettings = {}) {
 				} catch (error) { failRecord(record, error); }
 			});
 		} catch (error) {
+			fallback();
 			instance.destroy();
 			console.warn("[accordions] breakpoint setup failed", error);
 		}
 	};
 
+	const rollback = () => { fallback(); instance.destroy(); };
+	if (faq) detachFaq = registerFaqCleanup(faq, instance, () => instance.destroy());
+	else unregister = registerPending(root, rollback);
+	if (instance.destroyed) return null;
+
+
 	try {
+		records.forEach((record) => {
+			if (instance.destroyed) return;
+			try {
+				record.timeline = gsap.timeline({ paused: true, reversed: !record.isInitiallyOpen });
+				record.timeline.fromTo(record.content, { height: 0 }, { height: "auto", duration: 0.4, ease });
+				if (record.icon) record.timeline.fromTo(record.icon, { rotation: 0 }, { rotation: 180, duration: 0.4, ease }, "<");
+			} catch (error) { failRecord(record, error); }
+		});
+		if (instance.destroyed) return null;
 		activeBreakpoints.forEach((breakpoint) => {
 			const mq = window.matchMedia(BREAKPOINT_QUERIES[breakpoint]);
 			instance.mediaQueries.push(mq);
@@ -403,8 +446,18 @@ export function createAccordion(root, userSettings = {}) {
 		root._accordionInstance = instance;
 		instances.push(instance);
 		instance.evaluateBreakpointState();
+		if (instance.destroyed) return null;
+		if (faq ? !canStartFaq(faq) : !canStartComponent()) {
+			refuseLate();
+			instance.destroy();
+			return null;
+		}
+		records.forEach((record) => {
+			if (!record.failed) record.item.setAttribute("data-accordion-startup-state", "managed");
+		});
+		unregister();
 	} catch (error) {
-		instance.destroy();
+		rollback();
 		console.warn("[accordions] setup failed", error);
 		return null;
 	}
@@ -414,18 +467,37 @@ export function createAccordion(root, userSettings = {}) {
 
 export function initAccordions(scopeOrSettings = document, maybeSettings = {}) {
 	const { scope, settings } = normalizeInitArgs(scopeOrSettings, maybeSettings);
+	if (document.readyState === "loading") {
+		const pending = { scope, run: null };
+		pending.run = () => {
+			pendingInits = pendingInits.filter((entry) => entry !== pending);
+			initAccordions(scope, settings);
+		};
+		pendingInits.push(pending);
+		document.addEventListener("DOMContentLoaded", pending.run, { once: true });
+		return [];
+	}
 
 	bindFinsweetEvents();
 
 	return getAccordionRoots(scope)
 		.map((component) => {
 			try { return createAccordion(component, settings); }
-			catch (error) { console.warn("[accordions] setup failed", error); return null; }
+			catch (error) {
+				getItemsFromRoot(component).forEach((item) => item.setAttribute("data-accordion-startup-state", "fallback"));
+				fallbackFaq(accordionFaqRoot(component));
+				console.warn("[accordions] setup failed", error); return null;
+			}
 		})
 		.filter(Boolean);
 }
 
 export function destroyAccordions(scope) {
+	pendingInits = pendingInits.filter((entry) => {
+		if (scope && entry.scope !== scope) return true;
+		document.removeEventListener("DOMContentLoaded", entry.run);
+		return false;
+	});
 	const scopedRoots = scope ? new Set(getAccordionRoots(scope)) : null;
 
 	[...instances].forEach((instance) => {

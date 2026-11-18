@@ -1,7 +1,9 @@
+import { faqRoot, canStartFaq, fallbackFaq, registerFaqCleanup } from "./faq-startup.js";
 import { BREAKPOINT_QUERIES } from "../utils/breakpoints.js";
 import { qsa } from "../utils/dom.js";
 
 let instances = [];
+let pendingInits = [];
 
 const defaults = {
 	initialCount: 4,
@@ -127,6 +129,11 @@ function updateItems(instance) {
 export function createLoadMore(root, userSettings = {}) {
 	if (!root || root._loadMoreInstance) return root?._loadMoreInstance || null;
 
+	const candidate = faqRoot(root);
+	const faq = candidate && (candidate === root || qsa(root, selectors.item).some((item) =>
+		item.closest(selectors.component) === root && item.matches('[data-faq-split="item"]')))
+		? candidate : null;
+	if (faq && !canStartFaq(faq)) return null;
 	const settings = {
 		...defaults,
 		...userSettings,
@@ -134,7 +141,7 @@ export function createLoadMore(root, userSettings = {}) {
 
 	const trigger = qsa(root, selectors.trigger).find((element) => element.closest(selectors.component) === root);
 
-	if (!trigger) return null;
+	if (!trigger) { fallbackFaq(faq, "missing-load-more-trigger"); return null; }
 
 	const items = qsa(root, selectors.item).filter(
 		(item) => item.closest(selectors.component) === root,
@@ -175,7 +182,9 @@ export function createLoadMore(root, userSettings = {}) {
 		breakpoints: activeBreakpoints,
 	};
 
+	let detachFaq = () => {};
 	const fail = (error) => {
+		fallbackFaq(faq);
 		instance.destroy();
 		console.warn("[load-more] restored delivered items after failure", error);
 	};
@@ -191,6 +200,7 @@ export function createLoadMore(root, userSettings = {}) {
 	instance.destroy = () => {
 		if (instance.destroyed) return;
 		instance.destroyed = true;
+		detachFaq();
 		instance.mediaQueries.forEach((mq) => mq.removeEventListener("change", instance.evaluateBreakpointState));
 		unbindInstance(instance);
 		showAllItems(instance);
@@ -217,6 +227,8 @@ export function createLoadMore(root, userSettings = {}) {
 		} catch (error) { fail(error); }
 	};
 
+	if (faq) detachFaq = registerFaqCleanup(faq, instance, () => instance.destroy());
+	if (instance.destroyed) return null;
 	try {
 		activeBreakpoints.forEach((breakpoint) => {
 			const mq = window.matchMedia(BREAKPOINT_QUERIES[breakpoint]);
@@ -226,6 +238,7 @@ export function createLoadMore(root, userSettings = {}) {
 		root._loadMoreInstance = instance;
 		instances.push(instance);
 		instance.evaluateBreakpointState();
+		if (faq && !canStartFaq(faq)) return null;
 	} catch (error) { fail(error); return null; }
 
 	return instance.destroyed ? null : instance;
@@ -233,6 +246,16 @@ export function createLoadMore(root, userSettings = {}) {
 
 export function initLoadMore(scopeOrSettings = document, maybeSettings = {}) {
 	const { scope, settings } = normalizeInitArgs(scopeOrSettings, maybeSettings);
+	if (document.readyState === "loading") {
+		const pending = { scope, run: null };
+		pending.run = () => {
+			pendingInits = pendingInits.filter((entry) => entry !== pending);
+			initLoadMore(scope, settings);
+		};
+		pendingInits.push(pending);
+		document.addEventListener("DOMContentLoaded", pending.run, { once: true });
+		return [];
+	}
 
 	return getComponents(scope)
 		.map((component) => {
@@ -243,6 +266,11 @@ export function initLoadMore(scopeOrSettings = document, maybeSettings = {}) {
 }
 
 export function destroyLoadMore(scope) {
+	pendingInits = pendingInits.filter((entry) => {
+		if (scope && entry.scope !== scope) return true;
+		document.removeEventListener("DOMContentLoaded", entry.run);
+		return false;
+	});
 	const scopedRoots = scope ? new Set(getComponents(scope)) : null;
 
 	[...instances].forEach((instance) => {

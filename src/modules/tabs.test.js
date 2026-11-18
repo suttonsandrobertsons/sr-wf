@@ -138,6 +138,55 @@ describe("initTabs", () => {
 		});
 	});
 
+	it("uses the shared startup gate before mutating even when the legacy API would allow setup", () => {
+		const component = renderTabs();
+		window.sr = { componentStartup: { canEnhance: () => false }, tabStartup: { canEnhance: () => true } };
+		expect(initTabs()).toEqual([]);
+		expect(component.querySelectorAll('[data-tab-element="tab"]')).toHaveLength(0);
+		expect(component.querySelector('[data-tab-element="panel"]').hasAttribute("role")).toBe(false);
+	});
+
+	it("never retries a failed component after dependencies or its template are repaired", () => {
+		const component = renderTabs();
+		const template = component.querySelector('[data-tab-element="tab-template"]');
+		template.remove();
+		expect(initTabs()).toEqual([]);
+		component.querySelector('[data-tab-element="tabs"]').append(template);
+		expect(initTabs()).toEqual([]);
+		expect(component.dataset.componentState).toBe("fallback");
+		expect(component.querySelectorAll('[data-tab-element="tab"]')).toHaveLength(0);
+	});
+
+	it("rolls back partial tab mutations when setup crosses the absolute startup deadline", () => {
+		const component = renderTabs({ carousel: true });
+		let expired = false;
+		window.sr = { componentStartup: { canEnhance: () => !expired } };
+		const tabsRoot = component.querySelector('[data-tab-element="tabs"]');
+		const append = tabsRoot.append.bind(tabsRoot);
+		vi.spyOn(tabsRoot, "append").mockImplementation((...nodes) => { append(...nodes); expired = true; });
+		expect(initTabs()).toEqual([]);
+		expect(component.dataset.componentState).toBe("fallback");
+		expect(component.querySelectorAll('[data-tab-element="tab"]')).toHaveLength(0);
+		for (const panel of component.querySelectorAll('[data-tab-element="panel"]')) {
+			expect(panel.hasAttribute("role")).toBe(false);
+			expect(panel.style.display).toBe("");
+		}
+		for (const slide of component.querySelectorAll('.panel-carousel_item')) expect(slide.style.display).toBe("");
+	});
+
+	it("keeps a working instance and keyboard operation after global startup expires", () => {
+		const component = renderTabs();
+		let expired = false;
+		window.sr = { componentStartup: { canEnhance: () => !expired } };
+		const [instance] = initTabs();
+		expired = true;
+		expect(initTabs()).toEqual([instance]);
+		const tabs = component.querySelectorAll('[data-tab-element="tab"]');
+		tabs[0].dispatchEvent(new KeyboardEvent("keydown", { key: "End", bubbles: true }));
+		expect(tabs[1].getAttribute("aria-selected")).toBe("true");
+		expect(document.activeElement).toBe(tabs[1]);
+	});
+
 	it.each(["missing", "non-button"])("falls back for a %s template and still initialises the next component", (type) => {
 		const invalid = renderTabs();
 		const valid = invalid.cloneNode(true);

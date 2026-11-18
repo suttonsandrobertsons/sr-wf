@@ -213,23 +213,28 @@ it("isolates nested Load more controls and preserves authored item styling on cl
   expect(document.querySelector('[data-load-more="item"]').style.display).toBe("grid");
   expect(document.querySelector('[data-load-more="item"]').style.color).toBe("red");
 });
-it.each(["destroy", "failure"])("keeps desktop columns visible after %s and retry", (when) => {
+it("keeps desktop columns visible after normal destroy and reinitialisation", () => {
   const root = document.querySelector("section"), wrapper = root.querySelector(".faq_list-split-wrap");
-  if (when === "destroy") {
-    initFaq();
-    destroyFaq();
-  } else {
-    vi.spyOn(root.querySelector('[data-faq-split="target-2"]'), "appendChild").mockImplementationOnce(() => {
-      throw Error("split failed");
-    });
-    vi.spyOn(console, "warn").mockImplementation(() => {
-    });
-    initFaq();
-  }
+  initFaq();
+  destroyFaq();
   initFaq();
   expect(root.dataset.faqSplitState).toBe("desktop");
   expect(wrapper.style.display).not.toBe("none");
   expect(root.querySelectorAll('[data-faq-split="target-1"] > *')).toHaveLength(7);
+});
+it("keeps a failed split terminal instead of retrying on repeated init", () => {
+  const root = document.querySelector("section"), source = root.querySelector('[data-faq-split="source"]');
+  vi.spyOn(root.querySelector('[data-faq-split="target-2"]'), "appendChild").mockImplementationOnce(() => {
+    throw Error("split failed");
+  });
+  vi.spyOn(console, "warn").mockImplementation(() => {
+  });
+  initFaq();
+  initFaq();
+  expect(root.dataset.faqStartupState).toBe("fallback");
+  expect(root.hasAttribute("data-faq-split-state")).toBe(false);
+  expect(root.querySelector('[data-faq-split="source"]')).toBe(source);
+  expect(source.children).toHaveLength(13);
 });
 it("preserves focused source links on initial mobile layout and breakpoint reparenting", () => {
   resize(600);
@@ -268,4 +273,15 @@ it("returns no dead Load more instance after initial visibility failure", () => 
   });
   expect(initLoadMore()).toEqual([]);
   expect(root._loadMoreInstance).toBeNull();
+});
+it("keeps a newly delivered item from a desktop target visible and ordered after mobile resize", () => {
+  initFaq();
+  const root = document.querySelector("section");
+  root.querySelector('[data-faq-split="target-1"]').insertAdjacentHTML("beforeend", '<article data-faq-split="item">14</article>');
+  resize(600);
+  expect(numbers(root, "source", false)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
+  resize(1200);
+  resize(600);
+  expect(root.querySelectorAll('[data-faq-split="item"]')).toHaveLength(14);
+  expect(numbers(root, "source", false)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14]);
 });
