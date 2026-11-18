@@ -186,4 +186,20 @@ describe("Splide native fallback lifecycle", () => {
   expect(() => instance.destroy()).not.toThrow(); expect(root.dataset.carouselState).toBe("fallback");
  });
 
+ it("initialises and rebuilds independently of an expired shared component deadline", () => {
+  const old = window.sr;
+  const canEnhance = vi.fn(() => { throw Error("slider consulted the tab/FAQ gate"); });
+  window.sr = { componentStartup: { expired: true, deadline: -1, canEnhance } };
+  window.sr.tabStartup = window.sr.componentStartup;
+  try {
+   const root = document.querySelector(".splide"); root.dataset.splideLoopMobile = "true";
+   const instance = createCarousel(root);
+   expect(root.dataset.carouselState).toBe("ready");
+   media.matches = true; [...listeners].forEach(fn => fn());
+   expect(root._splideInstance).not.toBe(instance);
+   expect(root.dataset.carouselState).toBe("ready");
+   expect(canEnhance).not.toHaveBeenCalled();
+  } finally { window.sr = old; }
+ });
+
 });

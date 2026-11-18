@@ -400,7 +400,8 @@ function createTabs(component) {
 	if (!component) return null;
 	if (component[instanceKey]) return component[instanceKey];
 
-	if (window.sr?.tabStartup?.canEnhance() === false) {
+	const startup = window.sr?.componentStartup || window.sr?.tabStartup;
+	if (component.getAttribute(componentStateAttribute) === "fallback" || startup?.canEnhance() === false) {
 		setFallbackState(component);
 		return null;
 	}
@@ -429,10 +430,12 @@ function createTabs(component) {
 	const removeListeners = [];
 	let isCurrent = true;
 	let activeIndex = 0;
+	let unregisterStartup = () => {};
 
-	function cleanup() {
+	function cleanup(terminal = true) {
 		if (!isCurrent) return;
 		isCurrent = false;
+		unregisterStartup();
 		removeListeners.forEach((remove) => remove());
 		panelCarousels.forEach((instance) => {
 			try { instance.destroy(); } catch (error) { console.error("[tabs] Carousel cleanup failed", error); }
@@ -447,6 +450,8 @@ function createTabs(component) {
 		component[cleanupKey] = null;
 		component[instanceKey] = null;
 		setFallbackState(component);
+		// Explicit healthy teardown may be rebuilt before the deadline. Failures stay terminal.
+		if (!terminal) component.removeAttribute(componentStateAttribute);
 	}
 
 	function fail(error) {
@@ -456,6 +461,8 @@ function createTabs(component) {
 
 	try {
 		component[cleanupKey] = cleanup;
+		unregisterStartup = startup?.register?.(component, cleanup) || unregisterStartup;
+		if (!isCurrent) return null;
 		component.classList.remove("is-fallback");
 		component.setAttribute(componentStateAttribute, "loading");
 		component.setAttribute("aria-busy", "true");
@@ -615,6 +622,10 @@ function createTabs(component) {
 			withTransition: false,
 		});
 
+		if (startup?.canEnhance() === false) {
+			cleanup();
+			return null;
+		}
 		if (isCurrent) {
 			component.setAttribute(componentStateAttribute, "ready");
 			component.setAttribute("aria-busy", "false");
@@ -627,9 +638,10 @@ function createTabs(component) {
 			tabs,
 			panelCarousels,
 			setActiveTab,
-			destroy: cleanup,
+			destroy: () => cleanup(false),
 		};
 		component[instanceKey] = instance;
+		unregisterStartup();
 		return instance;
 	} catch (error) {
 		fail(error);
